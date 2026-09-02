@@ -1,19 +1,15 @@
-// receiver.js
-// WebRTC P2P Receiver Logic - FINAL ROBUST VERSION
+// receiver.js - PERFECTLY MATCHED TO YOUR HTML
 
-// ── DOM References (Matched to your HTML) ──
+// ── DOM References (Exactly matching your receiver.html) ─
 const connectionStatus = document.getElementById('connectionStatus');
-const connectingCard = document.getElementById('connectingCard');
-const waitingCard = document.getElementById('waitingCard');
-const receivingCard = document.getElementById('receivingCard');
+const loadingCard = document.getElementById('loadingCard'); // ✅ MATCHED
+const filesCard = document.getElementById('filesCard'); // ✅ MATCHED
+const transferLog = document.getElementById('transferLog'); // ✅ MATCHED
 const errorCard = document.getElementById('errorCard');
 const errorMessage = document.getElementById('errorMessage');
-const currentFileName = document.getElementById('currentFileName');
-const receiveProgressFill = document.getElementById('receiveProgressFill');
-const receiveProgressText = document.getElementById('receiveProgressText');
 const retryBtn = document.getElementById('retryBtn');
 
-// ── State ──
+// ── State ─
 const params = new URLSearchParams(window.location.search);
 const senderPeerId = params.get('peerId');
 
@@ -53,8 +49,8 @@ function connectToSender(targetId) {
             log('✅ Connected to sender!');
             connectionStatus.textContent = '✅ Connected! Waiting for files...';
             connectionStatus.style.color = 'var(--success)';
-            connectingCard.style.display = 'none';
-            waitingCard.style.display = 'block';
+            loadingCard.style.display = 'none'; // ✅ Using correct ID
+            filesCard.style.display = 'block'; // ✅ Using correct ID
         });
 
         conn.on('data', handleData);
@@ -85,12 +81,25 @@ function handleData(data) {
             receivedChunks = new Array(data.totalChunks);
             totalBytesReceived = 0;
             
-            waitingCard.style.display = 'none';
-            receivingCard.style.display = 'block';
-            currentFileName.textContent = data.name;
-            receiveProgressText.textContent = '0%';
-            receiveProgressFill.style.width = '0%';
-            receiveProgressFill.classList.remove('complete');
+            filesCard.style.display = 'block'; // ✅ Show files card
+            transferLog.innerHTML = ''; // Clear previous transfers
+            
+            // Create UI element for this transfer
+            const item = document.createElement('div');
+            item.className = 'file-card';
+            item.innerHTML = `
+                <div class="file-card-header">
+                    <span class="file-name">${data.name}</span>
+                    <span class="file-size">${formatSize(data.size)}</span>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="fill-${data.name}"></div>
+                    </div>
+                    <p class="progress-text" id="text-${data.name}">0%</p>
+                </div>
+            `;
+            transferLog.appendChild(item);
             
         } else if (data.type === 'chunk') {
             if (!currentFileMeta) {
@@ -104,8 +113,11 @@ function handleData(data) {
             
             // Update Progress
             const pct = Math.min(100, Math.round((totalBytesReceived / currentFileMeta.size) * 100));
-            receiveProgressText.textContent = `${pct}%`;
-            receiveProgressFill.style.width = `${pct}%`;
+            
+            const fill = document.getElementById(`fill-${currentFileMeta.name}`);
+            const text = document.getElementById(`text-${currentFileMeta.name}`);
+            if (fill) fill.style.width = `${pct}%`;
+            if (text) text.textContent = `${pct}%`;
             
         } else if (data.type === 'file-end') {
             log(`✅ File complete! Assembling...`);
@@ -117,13 +129,14 @@ function handleData(data) {
             log(`Downloaded ${formatSize(blob.size)} bytes`);
             triggerDownload(blob, currentFileMeta.name);
             
-            receiveProgressText.textContent = 'Complete ✓';
-            receiveProgressFill.classList.add('complete');
+            const text = document.getElementById(`text-${currentFileMeta.name}`);
+            if (text) {
+                text.textContent = 'Complete ✓';
+                text.style.color = 'var(--success)';
+            }
             
             // Reset for next file after a brief pause
             setTimeout(() => {
-                receivingCard.style.display = 'none';
-                waitingCard.style.display = 'block';
                 currentFileMeta = null;
                 receivedChunks = [];
                 totalBytesReceived = 0;
@@ -148,11 +161,10 @@ function triggerDownload(blob, filename) {
     log(`✅ Saved: ${filename}`);
 }
 
-// ── Utilities ──
+// ─ Utilities ──
 function showError(msg) {
-    connectingCard.style.display = 'none';
-    waitingCard.style.display = 'none';
-    receivingCard.style.display = 'none';
+    loadingCard.style.display = 'none';
+    filesCard.style.display = 'none';
     errorCard.style.display = 'block';
     errorMessage.textContent = msg;
     console.error(msg);
