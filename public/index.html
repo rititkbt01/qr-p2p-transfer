@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR P2P Transfer | Sender</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- QR generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- PeerJS for WebRTC -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📤 QR P2P Transfer</h1>
+            <p>Send files directly to any device. No apps, no server, no cloud storage.</p>
+        </header>
+
+        <main>
+            <!-- STEP 1: Connection Status -->
+            <section class="card" id="connectionCard">
+                <h2>1. Establishing Connection</h2>
+                <div class="spinner" id="connectionSpinner"></div>
+                <p class="center-text" id="connectionStatus">Generating secure peer ID...</p>
+            </section>
+
+            <!-- STEP 2: QR Code (hidden until connected) -->
+            <section class="card" id="qrSection" style="display: none;">
+                <h2>2. Scan to Connect</h2>
+                <p class="instruction">Point your phone camera at this code. Works on any network!</p>
+                <div class="qr-wrapper">
+                    <div id="qrcode"></div>
+                </div>
+                <p class="session-info">Peer ID: <strong id="peerIdDisplay">—</strong></p>
+                <p class="url-display" id="urlDisplay">—</p>
+                <p class="center-text hint" id="receiverStatus">Waiting for receiver to connect...</p>
+            </section>
+
+            <!-- STEP 3: File Selection (hidden until receiver connects) -->
+            <section class="card" id="fileSection" style="display: none;">
+                <h2>3. Select Files to Send</h2>
+
+                <div class="mode-toggle">
+                    <button class="toggle-btn active" id="btnFiles" type="button"> Files</button>
+                    <button class="toggle-btn" id="btnFolder" type="button">📁 Folder</button>
+                </div>
+
+                <div class="drop-zone" id="dropZone">
+                    <input type="file" id="fileInput" multiple hidden>
+                    <input type="file" id="folderInput" webkitdirectory hidden>
+
+                    <label for="fileInput" class="drop-label" id="dropLabel">
+                        <span class="icon">📄</span>
+                        <span id="dropText">Click to browse or drag & drop files here</span>
+                    </label>
+                </div>
+
+                <div id="fileList" class="file-list"></div>
+
+                <!-- Transfer Progress -->
+                <div class="progress-container" id="transferProgressContainer" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="transferProgressFill"></div>
+                    </div>
+                    <p class="progress-text" id="transferProgressText">0%</p>
+                </div>
+            </section>
+
+            <!-- Status Log -->
+            <section class="card">
+                <h2>Status</h2>
+                <div id="statusLog" class="status-log">
+                    <p> Initializing...</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="js/sender.js"></script>
+</body>
+</html>
