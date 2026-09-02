@@ -1,6 +1,6 @@
-// app.js - UNIVERSAL P2P LOGIC
+// app.js - UNIVERSAL P2P LOGIC (FIXED FOR BIDIRECTIONAL)
 
-// ─ DOM References ──
+// ── DOM References ──
 const hostView = document.getElementById('hostView');
 const clientView = document.getElementById('clientView');
 const qrWrapper = document.getElementById('qrWrapper');
@@ -17,10 +17,9 @@ const dropZone = document.getElementById('dropZone');
 // ── State ──
 let peer = null;
 let conn = null;
-let isFolderMode = false;
-let fileCounter = 0; // For unique UI IDs
+let fileCounter = 0;
 
-// ── Utility: Log ──
+// ── Utility: Log ─
 function log(msg, type = 'info') {
     const p = document.createElement('p');
     p.textContent = `> ${msg}`;
@@ -49,24 +48,25 @@ function init() {
     peer.on('open', (id) => {
         log(`P2P ID generated: ${id}`, 'success');
         
-        // Check if we are Host or Client based on URL
         const params = new URLSearchParams(window.location.search);
         const targetPeerId = params.get('peerId');
 
         if (targetPeerId) {
             // CLIENT MODE
             clientView.style.display = 'block';
+            hostView.style.display = 'none';
             connectToHost(targetPeerId);
         } else {
             // HOST MODE
             hostView.style.display = 'block';
+            clientView.style.display = 'none';
             showQRCode(id);
         }
     });
 
-    // If we are the Host, listen for incoming connections
+    // Host listens for incoming connections
     peer.on('connection', (connection) => {
-        log('Incoming connection received!', 'success');
+        log('📥 Incoming connection received!', 'success');
         handleConnection(connection);
     });
 
@@ -76,7 +76,6 @@ function init() {
 // ── 2. Host Logic (Show QR) ──
 function showQRCode(peerId) {
     const baseUrl = window.location.origin;
-    // The QR code now points to the ROOT with the peerId parameter
     const clientUrl = `${baseUrl}/?peerId=${peerId}`;
     
     peerIdDisplay.textContent = peerId;
@@ -104,16 +103,21 @@ function connectToHost(targetId) {
     });
     
     connection.on('error', (err) => log(`Connection error: ${err}`, 'error'));
+    connection.on('close', () => {
+        log('⚠️ Host disconnected.', 'error');
+        sendCard.style.display = 'none';
+    });
 }
 
 // ── 4. Handle Active Connection (Bidirectional) ──
 function handleConnection(connection) {
     conn = connection;
     
+    // CRITICAL: Show send card IMMEDIATELY when connection is ready
     conn.on('open', () => {
         log('✅ P2P Tunnel Established. Send/Receive enabled.', 'success');
-        // Enable Send UI on BOTH devices
-        sendCard.style.display = 'block';
+        sendCard.style.display = 'block'; // Show on BOTH devices
+        log(' Send Files card enabled!', 'success');
     });
 
     // Listen for incoming files on BOTH devices
@@ -128,8 +132,16 @@ function handleConnection(connection) {
 // ── 5. SENDING Logic ──
 fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
 
+// Make drop zone clickable for mobile
+dropZone.addEventListener('click', () => {
+    fileInput.click();
+});
+
 async function handleFiles(files) {
-    if (!conn || !conn.open) { log('❌ Not connected!', 'error'); return; }
+    if (!conn || !conn.open) { 
+        log('❌ Not connected!', 'error'); 
+        return; 
+    }
     if (!files || files.length === 0) return;
 
     log(`Starting transfer of ${files.length} file(s)...`, 'success');
@@ -139,9 +151,13 @@ async function handleFiles(files) {
     for (const file of files) {
         const item = document.createElement('div');
         item.className = 'file-item';
-        const nameSpan = document.createElement('span'); nameSpan.textContent = file.name;
-        const statusSpan = document.createElement('span'); statusSpan.className = 'size'; statusSpan.textContent = 'Pending';
-        item.appendChild(nameSpan); item.appendChild(statusSpan);
+        const nameSpan = document.createElement('span'); 
+        nameSpan.textContent = file.name;
+        const statusSpan = document.createElement('span'); 
+        statusSpan.className = 'size'; 
+        statusSpan.textContent = 'Pending';
+        item.appendChild(nameSpan); 
+        item.appendChild(statusSpan);
         fileListEl.appendChild(item);
         fileItems.push({ file, statusEl: statusSpan });
     }
@@ -164,10 +180,15 @@ function sendFile(file, statusEl) {
         function sendNextChunk() {
             if (currentChunk >= totalChunks) {
                 conn.send({ type: 'file-end', name: file.name });
-                statusEl.textContent = 'Done ✓'; statusEl.style.color = 'var(--success)';
-                resolve(); return;
+                statusEl.textContent = 'Done ✓'; 
+                statusEl.style.color = 'var(--success)';
+                resolve(); 
+                return;
             }
-            if (conn.bufferedAmount > 1024 * 1024) { setTimeout(sendNextChunk, 50); return; }
+            if (conn.bufferedAmount > 1024 * 1024) { 
+                setTimeout(sendNextChunk, 50); 
+                return; 
+            }
 
             const start = currentChunk * chunkSize;
             const end = Math.min(start + chunkSize, file.size);
@@ -227,48 +248,72 @@ function handleIncomingData(data) {
             
         } else if (data.type === 'file-end') {
             const text = document.getElementById(`text-${fileCounter}`);
-            if (text) { text.textContent = 'Received - Choose action'; text.style.color = 'var(--accent)'; }
+            if (text) { 
+                text.textContent = 'Received - Choose action'; 
+                text.style.color = 'var(--accent)'; 
+            }
             
             const card = document.getElementById(`card-${fileCounter}`);
             const validChunks = receivedChunks.filter(c => c !== undefined);
             const blob = new Blob(validChunks);
             
             const actionsDiv = document.createElement('div');
-            actionsDiv.style.display = 'flex'; actionsDiv.style.gap = '10px'; actionsDiv.style.marginTop = '12px';
+            actionsDiv.style.display = 'flex'; 
+            actionsDiv.style.gap = '10px'; 
+            actionsDiv.style.marginTop = '12px';
 
             const saveBtn = document.createElement('button');
-            saveBtn.className = 'btn-download'; saveBtn.style.flex = '1'; saveBtn.style.background = 'var(--success)';
+            saveBtn.className = 'btn-download'; 
+            saveBtn.style.flex = '1'; 
+            saveBtn.style.background = 'var(--success)';
             saveBtn.textContent = '💾 Save';
             saveBtn.onclick = () => {
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; a.download = currentFileMeta.name;
-                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                const a = document.createElement('a'); 
+                a.href = url; 
+                a.download = currentFileMeta.name;
+                document.body.appendChild(a); 
+                a.click(); 
+                document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                saveBtn.textContent = 'Saved ✓'; saveBtn.disabled = true; discardBtn.remove();
+                saveBtn.textContent = 'Saved ✓'; 
+                saveBtn.disabled = true; 
+                discardBtn.remove();
             };
 
             const discardBtn = document.createElement('button');
-            discardBtn.className = 'btn-download'; discardBtn.style.flex = '1'; discardBtn.style.background = 'var(--danger)';
+            discardBtn.className = 'btn-download'; 
+            discardBtn.style.flex = '1'; 
+            discardBtn.style.background = 'var(--danger)';
             discardBtn.textContent = '❌ Discard';
             discardBtn.onclick = () => card.remove();
 
-            actionsDiv.appendChild(saveBtn); actionsDiv.appendChild(discardBtn);
+            actionsDiv.appendChild(saveBtn); 
+            actionsDiv.appendChild(discardBtn);
             card.appendChild(actionsDiv);
             
-            currentFileMeta = null; receivedChunks = []; totalBytesReceived = 0;
+            currentFileMeta = null; 
+            receivedChunks = []; 
+            totalBytesReceived = 0;
         }
-    } catch (err) { log(`ERROR: ${err.message}`, 'error'); }
+    } catch (err) { 
+        log(`ERROR: ${err.message}`, 'error'); 
+    }
 }
 
 // ── 3D Tilt Effect ──
 document.querySelectorAll('.card').forEach(card => {
     card.addEventListener('mousemove', (e) => {
         const rect = card.getBoundingClientRect();
-        const x = e.clientX - rect.left; const y = e.clientY - rect.top;
-        const centerX = rect.width / 2; const centerY = rect.height / 2;
+        const x = e.clientX - rect.left; 
+        const y = e.clientY - rect.top;
+        const centerX = rect.width / 2; 
+        const centerY = rect.height / 2;
         card.style.transform = `perspective(1000px) rotateX(${((y - centerY) / centerY) * -4}deg) rotateY(${((x - centerX) / centerX) * 4}deg) scale3d(1.01, 1.01, 1.01)`;
     });
-    card.addEventListener('mouseleave', () => { card.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) scale3d(1, 1, 1)'; });
+    card.addEventListener('mouseleave', () => { 
+        card.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) scale3d(1, 1, 1)'; 
+    });
 });
 
 // Boot
