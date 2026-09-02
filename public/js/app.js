@@ -1,4 +1,4 @@
-// app.js - TRUE BIDIRECTIONAL P2P (MOBILE FIXED)
+// app.js - TRUE BIDIRECTIONAL P2P (FINAL MOBILE FIX)
 
 // ── DOM References ──
 const hostView = document.getElementById('hostView');
@@ -13,13 +13,12 @@ const fileListEl = document.getElementById('fileList');
 const transferLog = document.getElementById('transferLog');
 const statusLog = document.getElementById('statusLog');
 const dropZone = document.getElementById('dropZone');
-const dropLabel = document.getElementById('dropLabel');
 
 // ── State ──
 let peer = null;
 let conn = null;
 let fileCounter = 0;
-let isConnectionReady = false; // Track connection state explicitly
+let isConnectionReady = false;
 
 // ── Utility: Log ──
 function log(msg, type = 'info') {
@@ -91,7 +90,7 @@ function showQRCode(peerId) {
     log('✅ QR code generated! Share with client.', 'success');
 }
 
-// ─ 3. Client Logic (Connect) ──
+// ── 3. Client Logic (Connect) ──
 function connectToHost(targetId) {
     connectionStatus.textContent = `Connecting to ${targetId.substring(0, 8)}...`;
     log(`📡 Attempting to connect to: ${targetId}`, 'info');
@@ -121,18 +120,18 @@ function connectToHost(targetId) {
 // ── 4. Setup Connection (Called by BOTH Host and Client) ──
 function setupConnection(connection) {
     conn = connection;
-    log(' Setting up bidirectional connection...', 'info');
+    log('🔧 Setting up bidirectional connection...', 'info');
     
     conn.on('open', () => {
         log('✅ Connection stream opened!', 'success');
-        isConnectionReady = true; // ✅ Mark connection as ready
+        isConnectionReady = true;
         enableSendReceive();
     });
 
     conn.on('data', handleIncomingData);
     
     conn.on('close', () => {
-        log('⚠️ Peer disconnected.', 'error');
+        log('️ Peer disconnected.', 'error');
         isConnectionReady = false;
         sendCard.style.display = 'none';
     });
@@ -143,49 +142,18 @@ function setupConnection(connection) {
     });
 }
 
-// ── Enable Send/Receive on BOTH Devices ──
+// ─ Enable Send/Receive on BOTH Devices ──
 function enableSendReceive() {
-    log('🚀 Enabling Send & Receive capabilities...', 'success');
+    log(' Enabling Send & Receive capabilities...', 'success');
     sendCard.style.display = 'block';
     log('✅ You can now SEND and RECEIVE files!', 'success');
-    
-    // Update drop zone text to indicate it's ready
-    const dropText = document.getElementById('dropText');
-    if (dropText) {
-        dropText.textContent = 'Tap to select files';
-        dropText.style.color = 'var(--success)';
-    }
 }
 
-// ── 5. SENDING Logic (MOBILE OPTIMIZED) ─
+// ── 5. SENDING Logic (NATIVE LABEL CLICK - MOST RELIABLE) ──
 
-// Handle both click and touch events for mobile
-dropZone.addEventListener('click', handleDropZoneClick);
-dropZone.addEventListener('touchstart', handleDropZoneClick);
-
-function handleDropZoneClick(e) {
-    e.preventDefault(); // Prevent default behavior
-    
-    if (!isConnectionReady) {
-        log('❌ Not connected yet! Wait for connection.', 'error');
-        return;
-    }
-    
-    if (!conn || !conn.open) {
-        log('❌ Connection not open. Please reconnect.', 'error');
-        isConnectionReady = false;
-        return;
-    }
-    
-    log('📂 Opening file picker...', 'info');
-    
-    // Trigger file input - works better on mobile when called directly
-    fileInput.click();
-}
-
-// Handle file selection
+// File input change handler - this is the ONLY place we handle file selection
 fileInput.addEventListener('change', (e) => {
-    log(`📥 Files selected: ${e.target.files.length}`, 'info');
+    log(` Files selected: ${e.target.files.length}`, 'info');
     handleFiles(e.target.files);
     // Reset input so same file can be selected again
     fileInput.value = '';
@@ -198,7 +166,7 @@ async function handleFiles(files) {
     }
     
     if (!conn || !conn.open) { 
-        log(' Connection closed!', 'error'); 
+        log('❌ Connection closed!', 'error'); 
         isConnectionReady = false;
         return; 
     }
@@ -414,7 +382,7 @@ function handleIncomingData(data) {
     }
 }
 
-// ─ 3D Tilt Effect ──
+// ── 3D Tilt Effect ──
 document.querySelectorAll('.card').forEach(card => {
     card.addEventListener('mousemove', (e) => {
         const rect = card.getBoundingClientRect();
