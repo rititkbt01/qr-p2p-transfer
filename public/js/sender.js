@@ -1,7 +1,7 @@
 // sender.js
-// WebRTC P2P Sender Logic
+// WebRTC P2P Sender Logic - FINAL ROBUST VERSION
 
-// ── DOM References ──
+// ── DOM References (Matched to your HTML) ──
 const fileInput = document.getElementById('fileInput');
 const folderInput = document.getElementById('folderInput');
 const dropZone = document.getElementById('dropZone');
@@ -10,18 +10,21 @@ const dropText = document.getElementById('dropText');
 const fileListEl = document.getElementById('fileList');
 const btnFiles = document.getElementById('btnFiles');
 const btnFolder = document.getElementById('btnFolder');
-const qrWrapper = document.getElementById('qrWrapper');
+const qrSection = document.getElementById('qrSection');
+const fileSection = document.getElementById('fileSection');
 const peerIdDisplay = document.getElementById('peerIdDisplay');
 const urlDisplay = document.getElementById('urlDisplay');
-const fileCard = document.getElementById('fileCard');
+const receiverStatus = document.getElementById('receiverStatus');
 const statusLog = document.getElementById('statusLog');
+const connectionCard = document.getElementById('connectionCard');
+const connectionStatus = document.getElementById('connectionStatus');
 
 // ── State ──
 let peer = null;
 let conn = null;
 let isFolderMode = false;
 
-// ─ Utility: Log ──
+// ── Utility: Log ──
 function log(msg, type = 'info') {
     const p = document.createElement('p');
     p.textContent = `> ${msg}`;
@@ -40,8 +43,18 @@ function formatSize(bytes) {
 
 // ── 1. Initialize PeerJS ──
 function initPeer() {
-    // Create a new Peer with a random ID (PeerJS cloud handles the signaling)
-    peer = new Peer(); 
+    log('Initializing PeerJS...');
+    
+    // Create peer with STUN servers for better NAT traversal across networks
+    peer = new Peer(undefined, {
+        debug: 1,
+        config: {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        }
+    }); 
 
     peer.on('open', (id) => {
         log(`P2P ID generated: ${id}`, 'success');
@@ -49,7 +62,7 @@ function initPeer() {
     });
 
     peer.on('error', (err) => {
-        log(`PeerJS Error: ${err.type}`, 'error');
+        log(`PeerJS Error: ${err.type} - ${err.message}`, 'error');
     });
 
     // When a receiver connects
@@ -58,34 +71,38 @@ function initPeer() {
         
         conn.on('open', () => {
             log('✅ Receiver connected! P2P tunnel established.', 'success');
-            fileCard.style.display = 'block'; // Unlock file selection
-            document.querySelector('#connectionCard h2').textContent = '1. Connection Active';
-            document.querySelector('#connectionCard .instruction').textContent = 'Share files directly to the connected device.';
+            
+            // Hide initial loading, show QR and File sections
+            connectionCard.style.display = 'none';
+            qrSection.style.display = 'block';
+            fileSection.style.display = 'block';
+            
+            receiverStatus.textContent = '✅ Connected! Ready to send files.';
+            receiverStatus.style.color = 'var(--success)';
         });
 
         conn.on('close', () => {
             log('⚠️ Receiver disconnected.', 'error');
-            fileCard.style.display = 'none';
+            fileSection.style.display = 'none';
+            receiverStatus.textContent = 'Receiver disconnected. Refresh to restart.';
+            receiverStatus.style.color = 'var(--danger)';
+        });
+
+        conn.on('error', (err) => {
+            log(`Connection error: ${err}`, 'error');
         });
     });
 }
 
 // ── 2. Show QR Code ──
 function showQRCode(peerId) {
-    // Construct the public URL (Vercel will provide the domain)
-    // We use window.location.origin to get the current domain automatically
     const baseUrl = window.location.origin;
     const receiverUrl = `${baseUrl}/receiver.html?peerId=${peerId}`;
 
-    peerIdDisplay.style.display = 'block';
-    peerIdDisplay.querySelector('strong').textContent = peerId;
-    
-    urlDisplay.style.display = 'block';
+    peerIdDisplay.textContent = peerId;
     urlDisplay.textContent = receiverUrl;
 
-    qrWrapper.style.display = 'flex';
     document.getElementById('qrcode').innerHTML = '';
-    
     new QRCode(document.getElementById('qrcode'), {
         text: receiverUrl,
         width: 200,
@@ -119,27 +136,29 @@ async function handleFiles(files) {
     }
     if (!files || files.length === 0) return;
 
-    log(`Starting transfer of ${files.length} file(s)...`);
+    log(`Starting transfer of ${files.length} file(s)...`, 'success');
     fileListEl.innerHTML = '';
 
-    // Send files sequentially to avoid overwhelming the connection
+    // Send files sequentially
     for (const file of files) {
         const item = document.createElement('div');
         item.className = 'file-item';
         item.innerHTML = `<span>${file.name}</span><span class="size" id="status-${file.name}">Pending</span>`;
         fileListEl.appendChild(item);
 
-        await sendFile(file, item.querySelector(`#status-${file.name}`));
+        await sendFileWithFlowControl(file, item.querySelector(`#status-${file.name}`));
     }
-    log('✅ All files sent!', 'success');
+    log('✅ All files sent successfully!', 'success');
 }
 
-// The Magic: Chunking and Sending
-function sendFile(file, statusEl) {
+// ── 4. The Magic: Chunking WITH Flow Control ──
+function sendFileWithFlowControl(file, statusEl) {
     return new Promise((resolve) => {
-        const chunkSize = 16 * 1024; // 16KB chunks (safe for WebRTC)
+        // Reduced to 8KB chunks for maximum mobile browser compatibility
+        const chunkSize = 8 * 1024; 
         const totalChunks = Math.ceil(file.size / chunkSize);
         let currentChunk = 0;
+        let bytesSent = 0;
 
         // 1. Send Metadata
         conn.send({
@@ -151,13 +170,19 @@ function sendFile(file, statusEl) {
 
         statusEl.textContent = 'Sending...';
 
-        // 2. Recursive Chunk Sender
+        // 2. Recursive Chunk Sender with Buffer Check
         function sendNextChunk() {
             if (currentChunk >= totalChunks) {
-                conn.send({ type: 'file-end' });
+                conn.send({ type: 'file-end', name: file.name });
                 statusEl.textContent = 'Done ✓';
                 statusEl.style.color = 'var(--success)';
                 resolve();
+                return;
+            }
+
+            // FLOW CONTROL: If buffer is getting full (>1MB), wait before sending more
+            if (conn.bufferedAmount > 1024 * 1024) {
+                setTimeout(sendNextChunk, 50);
                 return;
             }
 
@@ -167,20 +192,36 @@ function sendFile(file, statusEl) {
             
             const reader = new FileReader();
             reader.onload = (e) => {
-                // Send the chunk (ArrayBuffer)
-                conn.send({
-                    type: 'chunk',
-                    index: currentChunk,
-                    data: e.target.result 
-                });
-                
-                currentChunk++;
-                // Simple progress update
-                const pct = Math.round((currentChunk / totalChunks) * 100);
-                statusEl.textContent = `${pct}%`;
-                
-                sendNextChunk(); // Send next
+                try {
+                    conn.send({
+                        type: 'chunk',
+                        index: currentChunk,
+                        data: e.target.result,
+                        fileName: file.name
+                    });
+                    
+                    currentChunk++;
+                    bytesSent += chunkSize;
+                    const pct = Math.min(100, Math.round((bytesSent / file.size) * 100));
+                    statusEl.textContent = `${pct}%`;
+                    
+                    // Micro-delay prevents overwhelming the receiver's main thread
+                    setTimeout(sendNextChunk, 5);
+                    
+                } catch (err) {
+                    log(`Error sending chunk: ${err.message}`, 'error');
+                    statusEl.textContent = 'Error ✗';
+                    statusEl.style.color = 'var(--danger)';
+                    resolve();
+                }
             };
+            
+            reader.onerror = () => {
+                log(`Error reading file chunk`, 'error');
+                statusEl.textContent = 'Read Error ✗';
+                resolve();
+            };
+            
             reader.readAsArrayBuffer(blob);
         }
 
@@ -188,7 +229,7 @@ function sendFile(file, statusEl) {
     });
 }
 
-// ─ Drag & Drop ──
+// ── Drag & Drop ──
 dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('drag-over'); });
 dropZone.addEventListener('drop', (e) => {
@@ -199,5 +240,5 @@ dropZone.addEventListener('drop', (e) => {
     handleFiles(e.dataTransfer.files);
 });
 
-// ─ Boot ──
+// ── Boot ──
 document.addEventListener('DOMContentLoaded', initPeer);
