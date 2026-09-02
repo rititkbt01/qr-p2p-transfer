@@ -1,4 +1,4 @@
-// app.js - TRUE BIDIRECTIONAL P2P (FINAL FIXED VERSION)
+// app.js - TRUE BIDIRECTIONAL P2P (MOBILE FIXED)
 
 // ── DOM References ──
 const hostView = document.getElementById('hostView');
@@ -13,11 +13,13 @@ const fileListEl = document.getElementById('fileList');
 const transferLog = document.getElementById('transferLog');
 const statusLog = document.getElementById('statusLog');
 const dropZone = document.getElementById('dropZone');
+const dropLabel = document.getElementById('dropLabel');
 
 // ── State ──
 let peer = null;
 let conn = null;
 let fileCounter = 0;
+let isConnectionReady = false; // Track connection state explicitly
 
 // ── Utility: Log ──
 function log(msg, type = 'info') {
@@ -52,13 +54,11 @@ function init() {
         const targetPeerId = params.get('peerId');
 
         if (targetPeerId) {
-            // CLIENT MODE
             clientView.style.display = 'block';
             hostView.style.display = 'none';
             log('Mode: Client (connecting to host)', 'info');
             connectToHost(targetPeerId);
         } else {
-            // HOST MODE
             hostView.style.display = 'block';
             clientView.style.display = 'none';
             log('Mode: Host (waiting for client)', 'info');
@@ -66,7 +66,6 @@ function init() {
         }
     });
 
-    // Host listens for incoming connections
     peer.on('connection', (connection) => {
         log('📥 Incoming connection received!', 'success');
         setupConnection(connection);
@@ -92,7 +91,7 @@ function showQRCode(peerId) {
     log('✅ QR code generated! Share with client.', 'success');
 }
 
-// ── 3. Client Logic (Connect) ──
+// ─ 3. Client Logic (Connect) ──
 function connectToHost(targetId) {
     connectionStatus.textContent = `Connecting to ${targetId.substring(0, 8)}...`;
     log(`📡 Attempting to connect to: ${targetId}`, 'info');
@@ -102,7 +101,6 @@ function connectToHost(targetId) {
         serialization: 'json' 
     });
     
-    // CRITICAL: Set up the connection IMMEDIATELY after creating it
     setupConnection(connection);
     
     connection.on('open', () => {
@@ -115,6 +113,7 @@ function connectToHost(targetId) {
     connection.on('error', (err) => log(`Connection error: ${err}`, 'error'));
     connection.on('close', () => {
         log('⚠️ Host disconnected.', 'error');
+        isConnectionReady = false;
         sendCard.style.display = 'none';
     });
 }
@@ -122,10 +121,11 @@ function connectToHost(targetId) {
 // ── 4. Setup Connection (Called by BOTH Host and Client) ──
 function setupConnection(connection) {
     conn = connection;
-    log('🔧 Setting up bidirectional connection...', 'info');
+    log(' Setting up bidirectional connection...', 'info');
     
     conn.on('open', () => {
         log('✅ Connection stream opened!', 'success');
+        isConnectionReady = true; // ✅ Mark connection as ready
         enableSendReceive();
     });
 
@@ -133,11 +133,13 @@ function setupConnection(connection) {
     
     conn.on('close', () => {
         log('⚠️ Peer disconnected.', 'error');
+        isConnectionReady = false;
         sendCard.style.display = 'none';
     });
     
     conn.on('error', (err) => {
         log(`Connection error: ${err}`, 'error');
+        isConnectionReady = false;
     });
 }
 
@@ -146,24 +148,61 @@ function enableSendReceive() {
     log('🚀 Enabling Send & Receive capabilities...', 'success');
     sendCard.style.display = 'block';
     log('✅ You can now SEND and RECEIVE files!', 'success');
+    
+    // Update drop zone text to indicate it's ready
+    const dropText = document.getElementById('dropText');
+    if (dropText) {
+        dropText.textContent = 'Tap to select files';
+        dropText.style.color = 'var(--success)';
+    }
 }
 
-// ── 5. SENDING Logic ──
-dropZone.addEventListener('click', () => {
-    if (!conn || !conn.open) {
-        log('❌ Not connected! Wait for connection.', 'error');
+// ── 5. SENDING Logic (MOBILE OPTIMIZED) ─
+
+// Handle both click and touch events for mobile
+dropZone.addEventListener('click', handleDropZoneClick);
+dropZone.addEventListener('touchstart', handleDropZoneClick);
+
+function handleDropZoneClick(e) {
+    e.preventDefault(); // Prevent default behavior
+    
+    if (!isConnectionReady) {
+        log('❌ Not connected yet! Wait for connection.', 'error');
         return;
     }
+    
+    if (!conn || !conn.open) {
+        log('❌ Connection not open. Please reconnect.', 'error');
+        isConnectionReady = false;
+        return;
+    }
+    
+    log('📂 Opening file picker...', 'info');
+    
+    // Trigger file input - works better on mobile when called directly
     fileInput.click();
+}
+
+// Handle file selection
+fileInput.addEventListener('change', (e) => {
+    log(`📥 Files selected: ${e.target.files.length}`, 'info');
+    handleFiles(e.target.files);
+    // Reset input so same file can be selected again
+    fileInput.value = '';
 });
 
-fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
-
 async function handleFiles(files) {
-    if (!conn || !conn.open) { 
-        log('❌ Not connected!', 'error'); 
+    if (!isConnectionReady) { 
+        log('❌ Connection not ready!', 'error'); 
         return; 
     }
+    
+    if (!conn || !conn.open) { 
+        log(' Connection closed!', 'error'); 
+        isConnectionReady = false;
+        return; 
+    }
+    
     if (!files || files.length === 0) return;
 
     log(`📤 Starting transfer of ${files.length} file(s)...`, 'success');
@@ -198,41 +237,56 @@ function sendFile(file, statusEl) {
 
         log(`📦 Sending: ${file.name} (${formatSize(file.size)})`, 'info');
 
-        conn.send({ type: 'file-start', name: file.name, size: file.size, totalChunks });
-        statusEl.textContent = 'Sending...';
+        try {
+            conn.send({ type: 'file-start', name: file.name, size: file.size, totalChunks });
+            statusEl.textContent = 'Sending...';
 
-        function sendNextChunk() {
-            if (currentChunk >= totalChunks) {
-                conn.send({ type: 'file-end', name: file.name });
-                statusEl.textContent = 'Done ✓'; 
-                statusEl.style.color = 'var(--success)';
-                resolve(); 
-                return;
-            }
-            if (conn.bufferedAmount > 1024 * 1024) { 
-                setTimeout(sendNextChunk, 50); 
-                return; 
-            }
+            function sendNextChunk() {
+                if (currentChunk >= totalChunks) {
+                    conn.send({ type: 'file-end', name: file.name });
+                    statusEl.textContent = 'Done ✓'; 
+                    statusEl.style.color = 'var(--success)';
+                    resolve(); 
+                    return;
+                }
+                
+                if (conn.bufferedAmount > 1024 * 1024) { 
+                    setTimeout(sendNextChunk, 50); 
+                    return; 
+                }
 
-            const start = currentChunk * chunkSize;
-            const end = Math.min(start + chunkSize, file.size);
-            const blob = file.slice(start, end);
-            const reader = new FileReader();
-            
-            reader.onload = (e) => {
-                conn.send({ type: 'chunk', index: currentChunk, data: e.target.result });
-                currentChunk++;
-                statusEl.textContent = `${Math.round((currentChunk / totalChunks) * 100)}%`;
-                setTimeout(sendNextChunk, 5);
-            };
-            reader.onerror = () => {
-                log(`❌ Error reading file chunk`, 'error');
-                statusEl.textContent = 'Error ✗';
-                resolve();
-            };
-            reader.readAsArrayBuffer(blob);
+                const start = currentChunk * chunkSize;
+                const end = Math.min(start + chunkSize, file.size);
+                const blob = file.slice(start, end);
+                const reader = new FileReader();
+                
+                reader.onload = (e) => {
+                    try {
+                        conn.send({ type: 'chunk', index: currentChunk, data: e.target.result });
+                        currentChunk++;
+                        statusEl.textContent = `${Math.round((currentChunk / totalChunks) * 100)}%`;
+                        setTimeout(sendNextChunk, 5);
+                    } catch (err) {
+                        log(`❌ Error sending chunk: ${err.message}`, 'error');
+                        statusEl.textContent = 'Error ✗';
+                        resolve();
+                    }
+                };
+                
+                reader.onerror = () => {
+                    log(`❌ Error reading file chunk`, 'error');
+                    statusEl.textContent = 'Error ✗';
+                    resolve();
+                };
+                
+                reader.readAsArrayBuffer(blob);
+            }
+            sendNextChunk();
+        } catch (err) {
+            log(`❌ Error starting file send: ${err.message}`, 'error');
+            statusEl.textContent = 'Error ✗';
+            resolve();
         }
-        sendNextChunk();
     });
 }
 
@@ -287,11 +341,7 @@ function handleIncomingData(data) {
             }
             
             const card = document.getElementById(`card-${fileCounter}`);
-            
-            // ✅ CRITICAL FIX: Capture filename locally BEFORE resetting state
             const fileName = currentFileMeta ? currentFileMeta.name : 'downloaded_file';
-            
-            // Create blob immediately
             const validChunks = receivedChunks.filter(c => c !== undefined);
             const fileBlob = new Blob(validChunks);
             log(`💾 Blob created: ${formatSize(fileBlob.size)} bytes`, 'success');
@@ -301,7 +351,6 @@ function handleIncomingData(data) {
             actionsDiv.style.gap = '10px'; 
             actionsDiv.style.marginTop = '12px';
 
-            // SAVE BUTTON
             const saveBtn = document.createElement('button');
             saveBtn.className = 'btn-download'; 
             saveBtn.style.flex = '1'; 
@@ -314,14 +363,13 @@ function handleIncomingData(data) {
                     const url = URL.createObjectURL(fileBlob);
                     const a = document.createElement('a'); 
                     a.href = url; 
-                    a.download = fileName; // Uses the safely captured local variable
+                    a.download = fileName;
                     a.style.display = 'none';
                     
                     document.body.appendChild(a); 
                     a.click(); 
                     document.body.removeChild(a);
                     
-                    // Clean up URL after a short delay to ensure download starts
                     setTimeout(() => {
                         URL.revokeObjectURL(url);
                     }, 100);
@@ -341,7 +389,6 @@ function handleIncomingData(data) {
                 }
             };
 
-            // DISCARD BUTTON
             const discardBtn = document.createElement('button');
             discardBtn.className = 'btn-download'; 
             discardBtn.style.flex = '1'; 
@@ -357,7 +404,6 @@ function handleIncomingData(data) {
             actionsDiv.appendChild(discardBtn);
             card.appendChild(actionsDiv);
             
-            // Reset for next file (Safe now because fileName is captured locally above)
             currentFileMeta = null; 
             receivedChunks = []; 
             totalBytesReceived = 0;
@@ -368,7 +414,7 @@ function handleIncomingData(data) {
     }
 }
 
-// ── 3D Tilt Effect ──
+// ─ 3D Tilt Effect ──
 document.querySelectorAll('.card').forEach(card => {
     card.addEventListener('mousemove', (e) => {
         const rect = card.getBoundingClientRect();

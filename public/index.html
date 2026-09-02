@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>QR P2P Transfer</title>
     <link rel="stylesheet" href="/css/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -37,10 +37,11 @@
             <section class="card" id="sendCard" style="display: none;">
                 <h2>2. Send Files</h2>
                 <div class="drop-zone" id="dropZone">
+                    <!-- Make file input directly accessible -->
                     <input type="file" id="fileInput" multiple hidden>
                     <label for="fileInput" class="drop-label" id="dropLabel">
                         <span class="icon">📄</span>
-                        <span id="dropText">Click to browse or drag & drop files here</span>
+                        <span id="dropText">Tap to select files</span>
                     </label>
                 </div>
                 <div id="fileList" class="file-list"></div>
@@ -56,7 +57,7 @@
             <section class="card">
                 <h2>Status</h2>
                 <div id="statusLog" class="status-log">
-                    <p>⏳ Initializing...</p>
+                    <p> Initializing...</p>
                 </div>
             </section>
         </main>
