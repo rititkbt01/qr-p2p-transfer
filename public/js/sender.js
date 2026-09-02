@@ -1,6 +1,5 @@
-// sender.js - DEBUG VERSION
+// sender.js - FINAL WORKING VERSION
 
-// ── DOM References ──
 const fileInput = document.getElementById('fileInput');
 const folderInput = document.getElementById('folderInput');
 const dropZone = document.getElementById('dropZone');
@@ -28,22 +27,21 @@ function log(msg, type = 'info') {
     if (type === 'error') p.classList.add('error');
     statusLog.appendChild(p);
     statusLog.scrollTop = statusLog.scrollHeight;
-    console.log(`[SENDER] ${msg}`);
+    console.log('[SENDER]', msg);
 }
 
 function formatSize(bytes) {
+    if (!bytes) return '0 B';
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-// ─ 1. Initialize PeerJS ─
 function initPeer() {
     log('Initializing PeerJS...');
     
-    // Check if PeerJS loaded
     if (typeof Peer === 'undefined') {
-        log('❌ ERROR: PeerJS library not loaded!', 'error');
+        log('❌ PeerJS not loaded!', 'error');
         return;
     }
     
@@ -51,8 +49,7 @@ function initPeer() {
         debug: 2,
         config: {
             iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
+                { urls: 'stun:stun.l.google.com:19302' }
             ]
         }
     });
@@ -63,19 +60,18 @@ function initPeer() {
     });
 
     peer.on('error', (err) => {
-        log(`PeerJS Error: ${err.type} - ${err.message}`, 'error');
+        log(`PeerJS Error: ${err.type}`, 'error');
     });
 
     peer.on('connection', (connection) => {
         conn = connection;
         
         conn.on('open', () => {
-            log('✅ Receiver connected! P2P tunnel established.', 'success');
+            log('✅ Receiver connected!', 'success');
             connectionCard.style.display = 'none';
             qrSection.style.display = 'block';
             fileSection.style.display = 'block';
-            receiverStatus.textContent = '✅ Connected! Ready to send files.';
-            receiverStatus.style.color = 'var(--success)';
+            receiverStatus.textContent = '✅ Connected! Ready to send.';
         });
 
         conn.on('close', () => {
@@ -85,77 +81,54 @@ function initPeer() {
     });
 }
 
-// ── 2. Show QR Code ──
-function showQRCode(peerId) {
-    console.log('[DEBUG] showQRCode called with ID:', peerId);
+async function showQRCode(peerId) {
+    console.log('[QR] Starting QR generation...');
     
-    // Check if QRCode library loaded
+    // Check libraries
     if (typeof QRCode === 'undefined') {
-        log('❌ ERROR: QRCode library not loaded! Check CDN.', 'error');
-        console.log('QRCode object:', typeof QRCode);
+        log('❌ QRCode library not loaded!', 'error');
         return;
     }
-    
-    console.log('[DEBUG] QRCode library loaded:', QRCode);
     
     const baseUrl = window.location.origin;
     const receiverUrl = `${baseUrl}/receiver.html?peerId=${peerId}`;
     
-    console.log('[DEBUG] Generated URL:', receiverUrl);
-
-    // Update text displays
-    if (peerIdDisplay) {
-        peerIdDisplay.textContent = peerId;
-        console.log('[DEBUG] Updated peerIdDisplay');
-    } else {
-        console.error('[DEBUG] peerIdDisplay element not found!');
-    }
+    // Update displays
+    if (peerIdDisplay) peerIdDisplay.textContent = peerId;
+    if (urlDisplay) urlDisplay.textContent = receiverUrl;
     
-    if (urlDisplay) {
-        urlDisplay.textContent = receiverUrl;
-        console.log('[DEBUG] Updated urlDisplay');
-    } else {
-        console.error('[DEBUG] urlDisplay element not found!');
-    }
-
-    // Show the QR section
+    // Show section
     if (qrSection) {
         qrSection.style.display = 'block';
-        console.log('[DEBUG] Showed qrSection');
-    } else {
-        console.error('[DEBUG] qrSection element not found!');
-    }
-
-    // Generate QR code
-    const qrContainer = document.getElementById('qrcode');
-    if (!qrContainer) {
-        log('❌ ERROR: #qrcode container not found!', 'error');
-        return;
+        console.log('[QR] Section displayed');
     }
     
-    console.log('[DEBUG] QR container found:', qrContainer);
-    
-    // Clear any existing QR code
-    qrContainer.innerHTML = '';
-    
+    // Generate QR using canvas
     try {
-        new QRCode(qrContainer, {
-            text: receiverUrl,
+        const canvas = document.getElementById('qrcode');
+        if (!canvas) {
+            log('❌ Canvas not found!', 'error');
+            return;
+        }
+        
+        await QRCode.toCanvas(canvas, receiverUrl, {
             width: 200,
-            height: 200,
-            colorDark: '#1a202c',
-            colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.M
+            margin: 2,
+            color: {
+                dark: '#1a202c',
+                light: '#ffffff'
+            }
         });
-        log('✅ QR code generated successfully!', 'success');
-        console.log('[DEBUG] QRCode object created');
+        
+        log('✅ QR code generated!', 'success');
+        console.log('[QR] Success!');
+        
     } catch (err) {
-        log(`❌ ERROR generating QR: ${err.message}`, 'error');
-        console.error('[DEBUG] QRCode generation error:', err);
+        log(`❌ QR Error: ${err.message}`, 'error');
+        console.error('[QR] Error:', err);
     }
 }
 
-// ── 3. File Selection ─
 btnFiles.addEventListener('click', () => setMode(false));
 btnFolder.addEventListener('click', () => setMode(true));
 
@@ -186,18 +159,16 @@ async function handleFiles(files) {
         item.className = 'file-item';
         item.innerHTML = `<span>${file.name}</span><span class="size" id="status-${file.name}">Pending</span>`;
         fileListEl.appendChild(item);
-
-        await sendFileWithFlowControl(file, item.querySelector(`#status-${file.name}`));
+        await sendFile(file, item.querySelector(`#status-${file.name}`));
     }
     log('✅ All files sent!', 'success');
 }
 
-function sendFileWithFlowControl(file, statusEl) {
+function sendFile(file, statusEl) {
     return new Promise((resolve) => {
         const chunkSize = 8 * 1024;
         const totalChunks = Math.ceil(file.size / chunkSize);
         let currentChunk = 0;
-        let bytesSent = 0;
 
         conn.send({
             type: 'file-start',
@@ -228,33 +199,18 @@ function sendFileWithFlowControl(file, statusEl) {
             
             const reader = new FileReader();
             reader.onload = (e) => {
-                try {
-                    conn.send({
-                        type: 'chunk',
-                        index: currentChunk,
-                        data: e.target.result,
-                        fileName: file.name
-                    });
-                    
-                    currentChunk++;
-                    bytesSent += chunkSize;
-                    const pct = Math.min(100, Math.round((bytesSent / file.size) * 100));
-                    statusEl.textContent = `${pct}%`;
-                    
-                    setTimeout(sendNextChunk, 5);
-                    
-                } catch (err) {
-                    log(`Error sending chunk: ${err.message}`, 'error');
-                    statusEl.textContent = 'Error ✗';
-                    statusEl.style.color = 'var(--danger)';
-                    resolve();
-                }
-            };
-            
-            reader.onerror = () => {
-                log(`Error reading file chunk`, 'error');
-                statusEl.textContent = 'Read Error ✗';
-                resolve();
+                conn.send({
+                    type: 'chunk',
+                    index: currentChunk,
+                    data: e.target.result,
+                    fileName: file.name
+                });
+                
+                currentChunk++;
+                const pct = Math.round((currentChunk / totalChunks) * 100);
+                statusEl.textContent = `${pct}%`;
+                
+                setTimeout(sendNextChunk, 5);
             };
             
             reader.readAsArrayBuffer(blob);
