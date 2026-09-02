@@ -1,7 +1,6 @@
-// sender.js
-// WebRTC P2P Sender Logic - FINAL ROBUST VERSION
+// sender.js - DEBUG VERSION
 
-// ── DOM References (Matched to your HTML) ──
+// ── DOM References ──
 const fileInput = document.getElementById('fileInput');
 const folderInput = document.getElementById('folderInput');
 const dropZone = document.getElementById('dropZone');
@@ -17,14 +16,11 @@ const urlDisplay = document.getElementById('urlDisplay');
 const receiverStatus = document.getElementById('receiverStatus');
 const statusLog = document.getElementById('statusLog');
 const connectionCard = document.getElementById('connectionCard');
-const connectionStatus = document.getElementById('connectionStatus');
 
-// ── State ──
 let peer = null;
 let conn = null;
 let isFolderMode = false;
 
-// ── Utility: Log ──
 function log(msg, type = 'info') {
     const p = document.createElement('p');
     p.textContent = `> ${msg}`;
@@ -32,29 +28,34 @@ function log(msg, type = 'info') {
     if (type === 'error') p.classList.add('error');
     statusLog.appendChild(p);
     statusLog.scrollTop = statusLog.scrollHeight;
+    console.log(`[SENDER] ${msg}`);
 }
 
-// ── Utility: Format Size ──
 function formatSize(bytes) {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-// ── 1. Initialize PeerJS ──
+// ─ 1. Initialize PeerJS ─
 function initPeer() {
     log('Initializing PeerJS...');
     
-    // Create peer with STUN servers for better NAT traversal across networks
+    // Check if PeerJS loaded
+    if (typeof Peer === 'undefined') {
+        log('❌ ERROR: PeerJS library not loaded!', 'error');
+        return;
+    }
+    
     peer = new Peer(undefined, {
-        debug: 1,
+        debug: 2,
         config: {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' }
             ]
         }
-    }); 
+    });
 
     peer.on('open', (id) => {
         log(`P2P ID generated: ${id}`, 'success');
@@ -65,18 +66,14 @@ function initPeer() {
         log(`PeerJS Error: ${err.type} - ${err.message}`, 'error');
     });
 
-    // When a receiver connects
     peer.on('connection', (connection) => {
         conn = connection;
         
         conn.on('open', () => {
             log('✅ Receiver connected! P2P tunnel established.', 'success');
-            
-            // Hide initial loading, show QR and File sections
             connectionCard.style.display = 'none';
             qrSection.style.display = 'block';
             fileSection.style.display = 'block';
-            
             receiverStatus.textContent = '✅ Connected! Ready to send files.';
             receiverStatus.style.color = 'var(--success)';
         });
@@ -84,36 +81,81 @@ function initPeer() {
         conn.on('close', () => {
             log('⚠️ Receiver disconnected.', 'error');
             fileSection.style.display = 'none';
-            receiverStatus.textContent = 'Receiver disconnected. Refresh to restart.';
-            receiverStatus.style.color = 'var(--danger)';
-        });
-
-        conn.on('error', (err) => {
-            log(`Connection error: ${err}`, 'error');
         });
     });
 }
 
 // ── 2. Show QR Code ──
 function showQRCode(peerId) {
+    console.log('[DEBUG] showQRCode called with ID:', peerId);
+    
+    // Check if QRCode library loaded
+    if (typeof QRCode === 'undefined') {
+        log('❌ ERROR: QRCode library not loaded! Check CDN.', 'error');
+        console.log('QRCode object:', typeof QRCode);
+        return;
+    }
+    
+    console.log('[DEBUG] QRCode library loaded:', QRCode);
+    
     const baseUrl = window.location.origin;
     const receiverUrl = `${baseUrl}/receiver.html?peerId=${peerId}`;
+    
+    console.log('[DEBUG] Generated URL:', receiverUrl);
 
-    peerIdDisplay.textContent = peerId;
-    urlDisplay.textContent = receiverUrl;
+    // Update text displays
+    if (peerIdDisplay) {
+        peerIdDisplay.textContent = peerId;
+        console.log('[DEBUG] Updated peerIdDisplay');
+    } else {
+        console.error('[DEBUG] peerIdDisplay element not found!');
+    }
+    
+    if (urlDisplay) {
+        urlDisplay.textContent = receiverUrl;
+        console.log('[DEBUG] Updated urlDisplay');
+    } else {
+        console.error('[DEBUG] urlDisplay element not found!');
+    }
 
-    document.getElementById('qrcode').innerHTML = '';
-    new QRCode(document.getElementById('qrcode'), {
-        text: receiverUrl,
-        width: 200,
-        height: 200,
-        colorDark: '#1a202c',
-        colorLight: '#ffffff',
-        correctLevel: QRCode.CorrectLevel.M
-    });
+    // Show the QR section
+    if (qrSection) {
+        qrSection.style.display = 'block';
+        console.log('[DEBUG] Showed qrSection');
+    } else {
+        console.error('[DEBUG] qrSection element not found!');
+    }
+
+    // Generate QR code
+    const qrContainer = document.getElementById('qrcode');
+    if (!qrContainer) {
+        log('❌ ERROR: #qrcode container not found!', 'error');
+        return;
+    }
+    
+    console.log('[DEBUG] QR container found:', qrContainer);
+    
+    // Clear any existing QR code
+    qrContainer.innerHTML = '';
+    
+    try {
+        new QRCode(qrContainer, {
+            text: receiverUrl,
+            width: 200,
+            height: 200,
+            colorDark: '#1a202c',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M
+        });
+        log('✅ QR code generated successfully!', 'success');
+        console.log('[DEBUG] QRCode object created');
+    } catch (err) {
+        log(`❌ ERROR generating QR: ${err.message}`, 'error');
+        console.error('[DEBUG] QRCode generation error:', err);
+    }
 }
 
-// ── 3. File Selection & Chunking Logic ──
+// ── 3. File Selection ─
 btnFiles.addEventListener('click', () => setMode(false));
 btnFolder.addEventListener('click', () => setMode(true));
 
@@ -139,7 +181,6 @@ async function handleFiles(files) {
     log(`Starting transfer of ${files.length} file(s)...`, 'success');
     fileListEl.innerHTML = '';
 
-    // Send files sequentially
     for (const file of files) {
         const item = document.createElement('div');
         item.className = 'file-item';
@@ -148,19 +189,16 @@ async function handleFiles(files) {
 
         await sendFileWithFlowControl(file, item.querySelector(`#status-${file.name}`));
     }
-    log('✅ All files sent successfully!', 'success');
+    log('✅ All files sent!', 'success');
 }
 
-// ── 4. The Magic: Chunking WITH Flow Control ──
 function sendFileWithFlowControl(file, statusEl) {
     return new Promise((resolve) => {
-        // Reduced to 8KB chunks for maximum mobile browser compatibility
-        const chunkSize = 8 * 1024; 
+        const chunkSize = 8 * 1024;
         const totalChunks = Math.ceil(file.size / chunkSize);
         let currentChunk = 0;
         let bytesSent = 0;
 
-        // 1. Send Metadata
         conn.send({
             type: 'file-start',
             name: file.name,
@@ -170,7 +208,6 @@ function sendFileWithFlowControl(file, statusEl) {
 
         statusEl.textContent = 'Sending...';
 
-        // 2. Recursive Chunk Sender with Buffer Check
         function sendNextChunk() {
             if (currentChunk >= totalChunks) {
                 conn.send({ type: 'file-end', name: file.name });
@@ -180,7 +217,6 @@ function sendFileWithFlowControl(file, statusEl) {
                 return;
             }
 
-            // FLOW CONTROL: If buffer is getting full (>1MB), wait before sending more
             if (conn.bufferedAmount > 1024 * 1024) {
                 setTimeout(sendNextChunk, 50);
                 return;
@@ -205,7 +241,6 @@ function sendFileWithFlowControl(file, statusEl) {
                     const pct = Math.min(100, Math.round((bytesSent / file.size) * 100));
                     statusEl.textContent = `${pct}%`;
                     
-                    // Micro-delay prevents overwhelming the receiver's main thread
                     setTimeout(sendNextChunk, 5);
                     
                 } catch (err) {
@@ -229,7 +264,6 @@ function sendFileWithFlowControl(file, statusEl) {
     });
 }
 
-// ── Drag & Drop ──
 dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('drag-over'); });
 dropZone.addEventListener('drop', (e) => {
@@ -240,5 +274,4 @@ dropZone.addEventListener('drop', (e) => {
     handleFiles(e.dataTransfer.files);
 });
 
-// ── Boot ──
 document.addEventListener('DOMContentLoaded', initPeer);
