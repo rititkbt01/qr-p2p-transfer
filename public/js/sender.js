@@ -1,6 +1,5 @@
-// sender.js - PERFECTLY MATCHED TO YOUR HTML
+// sender.js - FIXED FILE NAME SELECTOR ISSUE
 
-// ── DOM References (Exactly matching your index.html) ──
 const fileInput = document.getElementById('fileInput');
 const folderInput = document.getElementById('folderInput');
 const dropZone = document.getElementById('dropZone');
@@ -9,10 +8,10 @@ const dropText = document.getElementById('dropText');
 const fileListEl = document.getElementById('fileList');
 const btnFiles = document.getElementById('btnFiles');
 const btnFolder = document.getElementById('btnFolder');
-const qrWrapper = document.getElementById('qrWrapper'); // ✅ MATCHED
+const qrWrapper = document.getElementById('qrWrapper');
 const peerIdDisplay = document.getElementById('peerIdDisplay');
 const urlDisplay = document.getElementById('urlDisplay');
-const fileCard = document.getElementById('fileCard'); // ✅ MATCHED
+const fileCard = document.getElementById('fileCard');
 const statusLog = document.getElementById('statusLog');
 const connectionCard = document.getElementById('connectionCard');
 
@@ -68,11 +67,7 @@ function initPeer() {
         
         conn.on('open', () => {
             log('✅ Receiver connected! P2P tunnel established.', 'success');
-            
-            // Show the file selection card (using the CORRECT ID)
             fileCard.style.display = 'block';
-            
-            // Update instruction text
             const instruction = connectionCard.querySelector('.instruction');
             if (instruction) {
                 instruction.textContent = '✅ Connection Active! Share files directly.';
@@ -98,7 +93,6 @@ function showQRCode(peerId) {
     const baseUrl = window.location.origin;
     const receiverUrl = `${baseUrl}/receiver.html?peerId=${peerId}`;
     
-    // Update displays safely using the EXACT IDs from your HTML
     if (peerIdDisplay) {
         peerIdDisplay.style.display = 'block';
         peerIdDisplay.querySelector('strong').textContent = peerId;
@@ -109,23 +103,20 @@ function showQRCode(peerId) {
         urlDisplay.textContent = receiverUrl;
     }
     
-    // Show QR wrapper (using the CORRECT ID)
     if (qrWrapper) {
         qrWrapper.style.display = 'flex';
         console.log('[QR] Wrapper displayed');
     }
     
-    // Generate QR
     try {
         const qrContainer = document.getElementById('qrcode');
         if (!qrContainer) {
-            log('❌ QR container not found!', 'error');
+            log(' QR container not found!', 'error');
             return;
         }
         
-        qrContainer.innerHTML = ''; // Clear any old QR
+        qrContainer.innerHTML = '';
         
-        // USE THE CORRECT API FOR qrcodejs library
         new QRCode(qrContainer, {
             text: receiverUrl,
             width: 200,
@@ -168,12 +159,29 @@ async function handleFiles(files) {
     log(`Starting transfer of ${files.length} file(s)...`, 'success');
     fileListEl.innerHTML = '';
 
+    // ✅ FIXED: Create all file items first, then send with direct element reference
+    const fileItems = [];
     for (const file of files) {
         const item = document.createElement('div');
         item.className = 'file-item';
-        item.innerHTML = `<span>${file.name}</span><span class="size" id="status-${file.name}">Pending</span>`;
+        
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = file.name;
+        
+        const statusSpan = document.createElement('span');
+        statusSpan.className = 'size';
+        statusSpan.textContent = 'Pending';
+        
+        item.appendChild(nameSpan);
+        item.appendChild(statusSpan);
         fileListEl.appendChild(item);
-        await sendFile(file, item.querySelector(`#status-${file.name}`));
+        
+        fileItems.push({ file, statusEl: statusSpan });
+    }
+
+    // Send files sequentially
+    for (const { file, statusEl } of fileItems) {
+        await sendFile(file, statusEl);
     }
     log('✅ All files sent!', 'success');
 }
