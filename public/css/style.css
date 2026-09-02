@@ -1,254 +1,288 @@
 /* ═══════════════════════════════════════
-   GLOBAL RESET & VARIABLES
+   MODERN 3D GLASSMORPHISM THEME
    ═══════════════════════════════════════ */
 :root {
-    --bg: #f4f6f8;
-    --card: #ffffff;
-    --text: #1a202c;
-    --text-dim: #718096;
-    --accent: #3182ce;
-    --accent-hover: #2b6cb0;
-    --border: #e2e8f0;
-    --success: #38a169;
-    --danger: #e53e3e;
-    --progress-bg: #edf2f7;
+    --bg-dark: #0f172a;
+    --bg-gradient: radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.15) 0%, transparent 40%),
+                   radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.15) 0%, transparent 40%);
+    --glass-bg: rgba(255, 255, 255, 0.03);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    
+    --text-main: #f8fafc;
+    --text-dim: #94a3b8;
+    
+    --accent: #3b82f6;
+    --accent-glow: rgba(59, 130, 246, 0.5);
+    --accent-hover: #2563eb;
+    
+    --success: #10b981;
+    --success-glow: rgba(16, 185, 129, 0.5);
+    --danger: #ef4444;
+    --danger-glow: rgba(239, 68, 68, 0.5);
+    
+    --progress-bg: rgba(255, 255, 255, 0.05);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-dark);
+    background-image: var(--bg-gradient);
+    background-attachment: fixed;
+    color: var(--text-main);
     line-height: 1.6;
     padding: 20px;
+    min-height: 100vh;
+    overflow-x: hidden;
 }
 
-.container { max-width: 560px; margin: 0 auto; }
-header { text-align: center; margin-bottom: 28px; }
-header h1 { font-size: 1.7rem; margin-bottom: 6px; }
-header p { color: var(--text-dim); font-size: 0.95rem; }
+/* Animated Background Orbs */
+body::before, body::after {
+    content: '';
+    position: fixed;
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    filter: blur(80px);
+    z-index: -1;
+    animation: float 10s infinite ease-in-out;
+}
+body::before { background: rgba(59, 130, 246, 0.2); top: -50px; left: -50px; }
+body::after { background: rgba(139, 92, 246, 0.2); bottom: -50px; right: -50px; animation-delay: -5s; }
+
+@keyframes float {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(30px, 30px); }
+}
+
+.container { max-width: 600px; margin: 0 auto; position: relative; z-index: 1; }
+
+header { text-align: center; margin-bottom: 40px; }
+header h1 { 
+    font-size: 2.2rem; 
+    font-weight: 800; 
+    margin-bottom: 8px; 
+    background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
+}
+header p { color: var(--text-dim); font-size: 1rem; }
 
 /* ═══════════════════════════════════════
-   CARDS
+   3D GLASS CARDS
    ═══════════════════════════════════════ */
 .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 24px;
-    margin-bottom: 18px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    padding: 28px;
+    margin-bottom: 24px;
+    box-shadow: var(--glass-shadow);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    transform-style: preserve-3d;
 }
+
+/* 3D Tilt Hover Effect (Handled by JS, but base transition here) */
+.card:hover {
+    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
+}
+
 .card h2 {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
-    color: var(--text-dim);
-    margin-bottom: 16px;
+    letter-spacing: 1.5px;
+    color: var(--accent);
+    margin-bottom: 20px;
+    font-weight: 700;
 }
 
 /* ═══════════════════════════════════════
-   MODE TOGGLE (Files / Folder)
+   MODE TOGGLE
    ═══════════════════════════════════════ */
 .mode-toggle {
     display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
+    gap: 12px;
+    margin-bottom: 20px;
+    background: rgba(0,0,0,0.2);
+    padding: 4px;
+    border-radius: 12px;
 }
 .toggle-btn {
     flex: 1;
-    padding: 10px;
-    border: 2px solid var(--border);
-    border-radius: 8px;
-    background: var(--card);
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-dim);
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     font-weight: 600;
-    transition: all 0.15s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .toggle-btn.active {
-    border-color: var(--accent);
-    background: #ebf8ff;
-    color: var(--accent);
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 4px 12px var(--accent-glow);
 }
 
 /* ═══════════════════════════════════════
    DROP ZONE
    ═══════════════════════════════════════ */
 .drop-zone {
-    border: 2px dashed var(--border);
-    border-radius: 10px;
-    padding: 32px 20px;
+    border: 2px dashed var(--glass-border);
+    border-radius: 16px;
+    padding: 40px 20px;
     text-align: center;
     cursor: pointer;
-    transition: border-color 0.2s, background 0.2s;
+    transition: all 0.3s ease;
+    background: rgba(0,0,0,0.1);
 }
-.drop-zone:hover,
-.drop-zone.drag-over {
+.drop-zone:hover, .drop-zone.drag-over {
     border-color: var(--accent);
-    background: #ebf8ff;
+    background: rgba(59, 130, 246, 0.05);
+    transform: translateY(-2px);
 }
-.drop-label {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    color: var(--text-dim);
-    cursor: pointer;
-}
-.drop-label .icon { font-size: 2rem; }
+.drop-label { display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--text-dim); }
+.drop-label .icon { font-size: 2.5rem; filter: drop-shadow(0 0 8px rgba(255,255,255,0.2)); }
 
 /* ═══════════════════════════════════════
-   FILE LIST (Sender)
+   FILE LIST & PROGRESS
    ═══════════════════════════════════════ */
-.file-list { margin-top: 14px; }
+.file-list { margin-top: 16px; }
 .file-item {
     display: flex;
     justify-content: space-between;
-    background: var(--bg);
-    padding: 10px 14px;
-    border-radius: 8px;
-    margin-bottom: 6px;
-    font-size: 0.9rem;
+    align-items: center;
+    background: rgba(255,255,255,0.03);
+    padding: 14px 18px;
+    border-radius: 12px;
+    margin-bottom: 10px;
+    font-size: 0.95rem;
+    border: 1px solid transparent;
+    transition: all 0.2s;
 }
-.file-item .size { color: var(--text-dim); white-space: nowrap; margin-left: 12px; }
+.file-item:hover { border-color: var(--glass-border); }
+.file-item .size { color: var(--text-dim); font-weight: 500; }
 
-/* ═══════════════════════════════════════
-   PROGRESS BAR
-   ═══════════════════════════════════════ */
 .progress-container { margin-top: 16px; }
 .progress-bar {
     width: 100%;
-    height: 10px;
+    height: 8px;
     background: var(--progress-bg);
-    border-radius: 5px;
+    border-radius: 4px;
     overflow: hidden;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);
 }
 .progress-fill {
     height: 100%;
     width: 0%;
-    background: var(--accent);
-    border-radius: 5px;
-    transition: width 0.15s ease-out;
+    background: linear-gradient(90deg, var(--accent), #8b5cf6);
+    border-radius: 4px;
+    transition: width 0.3s ease-out;
+    box-shadow: 0 0 10px var(--accent-glow);
 }
-.progress-fill.complete { background: var(--success); }
-.progress-text {
-    text-align: center;
-    font-size: 0.85rem;
-    color: var(--text-dim);
-    margin-top: 6px;
-}
+.progress-fill.complete { background: linear-gradient(90deg, var(--success), #34d399); box-shadow: 0 0 10px var(--success-glow); }
+.progress-text { text-align: center; font-size: 0.85rem; color: var(--text-dim); margin-top: 8px; font-weight: 500; }
 
 /* ═══════════════════════════════════════
-   QR CODE
+   QR CODE (3D FLOATING)
    ═══════════════════════════════════════ */
 .qr-wrapper {
     display: flex;
     justify-content: center;
-    padding: 20px;
-    background: #ffffff; /* Scanners need white background */
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    margin: 14px 0;
+    padding: 24px;
+    background: #ffffff; /* MUST be white for scanners */
+    border-radius: 16px;
+    margin: 20px auto;
+    max-width: 240px;
+    box-shadow: 
+        0 20px 40px rgba(0,0,0,0.4),
+        0 0 0 1px rgba(255,255,255,0.1);
+    transform: perspective(1000px) rotateX(5deg);
+    transition: transform 0.5s ease;
 }
-.instruction { text-align: center; color: var(--text-dim); font-size: 0.9rem; }
-.session-info { text-align: center; font-size: 0.85rem; margin-top: 10px; }
-.url-display {
-    text-align: center;
-    font-size: 0.75rem;
-    color: var(--text-dim);
-    word-break: break-all;
-    margin-top: 4px;
-}
+.qr-wrapper:hover { transform: perspective(1000px) rotateX(0deg) scale(1.05); }
+
+.session-info, .url-display { text-align: center; font-size: 0.85rem; color: var(--text-dim); margin-top: 12px; word-break: break-all; }
+.session-info strong { color: var(--text-main); font-family: monospace; }
 
 /* ═══════════════════════════════════════
    STATUS LOG
    ═══════════════════════════════════════ */
 .status-log {
-    font-family: "SF Mono", "Fira Code", "Consolas", monospace;
-    font-size: 0.8rem;
-    max-height: 180px;
+    font-family: 'Fira Code', 'Consolas', monospace;
+    font-size: 0.85rem;
+    max-height: 200px;
     overflow-y: auto;
     color: var(--text-dim);
+    background: rgba(0,0,0,0.2);
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
 }
-.status-log p { margin-bottom: 4px; }
-.status-log .success { color: var(--success); }
-.status-log .error { color: var(--danger); }
+.status-log p { margin-bottom: 6px; }
+.status-log .success { color: var(--success); text-shadow: 0 0 5px var(--success-glow); }
+.status-log .error { color: var(--danger); text-shadow: 0 0 5px var(--danger-glow); }
 
-/* ═══════════════════════════════════════
-   RECEIVER PAGE
+/* ══════════════════════════════════════
+   RECEIVER SPECIFIC
    ═══════════════════════════════════════ */
-.receiver-bg { background: #edf2f7; }
+.receiver-bg { background-color: var(--bg-dark); background-image: var(--bg-gradient); }
 .center-text { text-align: center; }
-.hint { font-size: 0.85rem; color: var(--text-dim); margin-top: 6px; }
 
 .spinner {
-    width: 36px;
-    height: 36px;
-    border: 4px solid var(--border);
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--glass-border);
     border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
-    margin: 0 auto 16px;
+    margin: 0 auto 20px;
+    box-shadow: 0 0 15px var(--accent-glow);
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.receiver-file-list { display: flex; flex-direction: column; gap: 10px; }
-
+.receiver-file-list { display: flex; flex-direction: column; gap: 16px; }
 .file-card {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 20px;
+    transition: all 0.3s;
 }
-.file-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-}
-.file-name { font-weight: 600; font-size: 0.95rem; word-break: break-word; flex: 1; }
-.file-size { font-size: 0.8rem; color: var(--text-dim); margin-left: 10px; white-space: nowrap; }
+.file-card:hover { background: rgba(255,255,255,0.05); }
+.file-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.file-name { font-weight: 600; font-size: 1rem; word-break: break-word; flex: 1; }
+.file-size { font-size: 0.85rem; color: var(--text-dim); margin-left: 12px; white-space: nowrap; }
 
-.btn-download {
+/* 3D Buttons */
+.btn-download, .btn-primary {
     display: inline-block;
     background: var(--accent);
-    color: #fff;
+    color: white;
     border: none;
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    font-weight: 600;
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    font-weight: 700;
     cursor: pointer;
     text-align: center;
-    width: 100%;
-    transition: background 0.15s;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 0 #1d4ed8, 0 5px 10px rgba(0,0,0,0.3); /* 3D depth */
+    margin-top: 12px;
 }
-.btn-download:hover { background: var(--accent-hover); }
-.btn-download:disabled { background: #a0aec0; cursor: not-allowed; }
-.btn-download.downloading { background: var(--accent-hover); }
-
-.btn-primary {
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    padding: 14px;
-    border-radius: 8px;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    width: 100%;
-    margin-top: 16px;
+.btn-download:hover, .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 0 #1d4ed8, 0 8px 15px rgba(0,0,0,0.4);
 }
-
-/* Add to your existing style.css */
-#connectionSpinner {
-    width: 36px;
-    height: 36px;
-    border: 4px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin: 0 auto 16px;
+.btn-download:active, .btn-primary:active {
+    transform: translateY(4px);
+    box-shadow: 0 0 0 #1d4ed8, 0 2px 5px rgba(0,0,0,0.3); /* Pressed effect */
 }
+.btn-download[style*="success"] { background: var(--success); box-shadow: 0 4px 0 #059669, 0 5px 10px rgba(0,0,0,0.3); }
+.btn-download[style*="danger"] { background: var(--danger); box-shadow: 0 4px 0 #dc2626, 0 5px 10px rgba(0,0,0,0.3); }
