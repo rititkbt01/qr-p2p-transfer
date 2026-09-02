@@ -1,5 +1,6 @@
-// sender.js - CORRECTED QR API
+// sender.js - PERFECTLY MATCHED TO YOUR HTML
 
+// ── DOM References (Exactly matching your index.html) ──
 const fileInput = document.getElementById('fileInput');
 const folderInput = document.getElementById('folderInput');
 const dropZone = document.getElementById('dropZone');
@@ -8,11 +9,10 @@ const dropText = document.getElementById('dropText');
 const fileListEl = document.getElementById('fileList');
 const btnFiles = document.getElementById('btnFiles');
 const btnFolder = document.getElementById('btnFolder');
-const qrSection = document.getElementById('qrSection');
-const fileSection = document.getElementById('fileSection');
+const qrWrapper = document.getElementById('qrWrapper'); // ✅ MATCHED
 const peerIdDisplay = document.getElementById('peerIdDisplay');
 const urlDisplay = document.getElementById('urlDisplay');
-const receiverStatus = document.getElementById('receiverStatus');
+const fileCard = document.getElementById('fileCard'); // ✅ MATCHED
 const statusLog = document.getElementById('statusLog');
 const connectionCard = document.getElementById('connectionCard');
 
@@ -46,7 +46,7 @@ function initPeer() {
     }
     
     peer = new Peer(undefined, {
-        debug: 2,
+        debug: 1,
         config: {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' }
@@ -67,16 +67,22 @@ function initPeer() {
         conn = connection;
         
         conn.on('open', () => {
-            log('✅ Receiver connected!', 'success');
-            connectionCard.style.display = 'none';
-            qrSection.style.display = 'block';
-            fileSection.style.display = 'block';
-            receiverStatus.textContent = '✅ Connected! Ready to send.';
+            log('✅ Receiver connected! P2P tunnel established.', 'success');
+            
+            // Show the file selection card (using the CORRECT ID)
+            fileCard.style.display = 'block';
+            
+            // Update instruction text
+            const instruction = connectionCard.querySelector('.instruction');
+            if (instruction) {
+                instruction.textContent = '✅ Connection Active! Share files directly.';
+                instruction.style.color = 'var(--success)';
+            }
         });
 
         conn.on('close', () => {
             log('⚠️ Receiver disconnected.', 'error');
-            fileSection.style.display = 'none';
+            fileCard.style.display = 'none';
         });
     });
 }
@@ -84,7 +90,6 @@ function initPeer() {
 function showQRCode(peerId) {
     console.log('[QR] Starting QR generation...');
     
-    // Check if QRCode library loaded
     if (typeof QRCode === 'undefined') {
         log('❌ QRCode library not loaded!', 'error');
         return;
@@ -93,17 +98,24 @@ function showQRCode(peerId) {
     const baseUrl = window.location.origin;
     const receiverUrl = `${baseUrl}/receiver.html?peerId=${peerId}`;
     
-    // Update displays
-    if (peerIdDisplay) peerIdDisplay.textContent = peerId;
-    if (urlDisplay) urlDisplay.textContent = receiverUrl;
-    
-    // Show section
-    if (qrSection) {
-        qrSection.style.display = 'block';
-        console.log('[QR] Section displayed');
+    // Update displays safely using the EXACT IDs from your HTML
+    if (peerIdDisplay) {
+        peerIdDisplay.style.display = 'block';
+        peerIdDisplay.querySelector('strong').textContent = peerId;
     }
     
-    // Generate QR using the CORRECT API for qrcodejs library
+    if (urlDisplay) {
+        urlDisplay.style.display = 'block';
+        urlDisplay.textContent = receiverUrl;
+    }
+    
+    // Show QR wrapper (using the CORRECT ID)
+    if (qrWrapper) {
+        qrWrapper.style.display = 'flex';
+        console.log('[QR] Wrapper displayed');
+    }
+    
+    // Generate QR
     try {
         const qrContainer = document.getElementById('qrcode');
         if (!qrContainer) {
@@ -111,10 +123,9 @@ function showQRCode(peerId) {
             return;
         }
         
-        // Clear any existing QR code
-        qrContainer.innerHTML = '';
+        qrContainer.innerHTML = ''; // Clear any old QR
         
-        // Use the CORRECT constructor for qrcodejs library
+        // USE THE CORRECT API FOR qrcodejs library
         new QRCode(qrContainer, {
             text: receiverUrl,
             width: 200,
@@ -125,7 +136,6 @@ function showQRCode(peerId) {
         });
         
         log('✅ QR code generated!', 'success');
-        console.log('[QR] Success!');
         
     } catch (err) {
         log(`❌ QR Error: ${err.message}`, 'error');
