@@ -1,4 +1,4 @@
-// app.js - UNIVERSAL P2P LOGIC (FIXED FOR BIDIRECTIONAL)
+// app.js - TRUE BIDIRECTIONAL P2P (FIXED)
 
 // ── DOM References ──
 const hostView = document.getElementById('hostView');
@@ -55,19 +55,21 @@ function init() {
             // CLIENT MODE
             clientView.style.display = 'block';
             hostView.style.display = 'none';
+            log('Mode: Client (connecting to host)', 'info');
             connectToHost(targetPeerId);
         } else {
             // HOST MODE
             hostView.style.display = 'block';
             clientView.style.display = 'none';
+            log('Mode: Host (waiting for client)', 'info');
             showQRCode(id);
         }
     });
 
     // Host listens for incoming connections
     peer.on('connection', (connection) => {
-        log('📥 Incoming connection received!', 'success');
-        handleConnection(connection);
+        log(' Incoming connection received!', 'success');
+        setupConnection(connection);
     });
 
     peer.on('error', (err) => log(`PeerJS Error: ${err.type}`, 'error'));
@@ -87,19 +89,28 @@ function showQRCode(peerId) {
         colorDark: '#1a202c', colorLight: '#ffffff',
         correctLevel: QRCode.CorrectLevel.M
     });
-    log('✅ QR code generated!', 'success');
+    log('✅ QR code generated! Share with client.', 'success');
 }
 
 // ─ 3. Client Logic (Connect) ──
 function connectToHost(targetId) {
     connectionStatus.textContent = `Connecting to ${targetId.substring(0, 8)}...`;
-    const connection = peer.connect(targetId, { reliable: true, serialization: 'json' });
+    log(`📡 Attempting to connect to: ${targetId}`, 'info');
+    
+    const connection = peer.connect(targetId, { 
+        reliable: true, 
+        serialization: 'json' 
+    });
+    
+    // CRITICAL: Set up the connection IMMEDIATELY after creating it
+    setupConnection(connection);
     
     connection.on('open', () => {
-        log('✅ Connected to Host!', 'success');
+        log('✅ Successfully connected to Host!', 'success');
         connectionStatus.textContent = '✅ Connected!';
         connectionStatus.style.color = 'var(--success)';
-        handleConnection(connection);
+        // Enable send capability on client
+        enableSendReceive();
     });
     
     connection.on('error', (err) => log(`Connection error: ${err}`, 'error'));
@@ -109,33 +120,47 @@ function connectToHost(targetId) {
     });
 }
 
-// ── 4. Handle Active Connection (Bidirectional) ──
-function handleConnection(connection) {
+// ── 4. Setup Connection (Called by BOTH Host and Client) ──
+function setupConnection(connection) {
     conn = connection;
+    log('🔧 Setting up bidirectional connection...', 'info');
     
-    // CRITICAL: Show send card IMMEDIATELY when connection is ready
+    // When connection opens
     conn.on('open', () => {
-        log('✅ P2P Tunnel Established. Send/Receive enabled.', 'success');
-        sendCard.style.display = 'block'; // Show on BOTH devices
-        log(' Send Files card enabled!', 'success');
+        log('✅ Connection stream opened!', 'success');
+        enableSendReceive();
     });
 
-    // Listen for incoming files on BOTH devices
+    // Listen for incoming data (files) on BOTH devices
     conn.on('data', handleIncomingData);
     
     conn.on('close', () => {
         log('⚠️ Peer disconnected.', 'error');
         sendCard.style.display = 'none';
     });
+    
+    conn.on('error', (err) => {
+        log(`Connection error: ${err}`, 'error');
+    });
+}
+
+// ── Enable Send/Receive on BOTH Devices ──
+function enableSendReceive() {
+    log('🚀 Enabling Send & Receive capabilities...', 'success');
+    sendCard.style.display = 'block';
+    log('✅ You can now SEND and RECEIVE files!', 'success');
 }
 
 // ── 5. SENDING Logic ──
-fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
-
-// Make drop zone clickable for mobile
 dropZone.addEventListener('click', () => {
+    if (!conn || !conn.open) {
+        log('❌ Not connected! Wait for connection.', 'error');
+        return;
+    }
     fileInput.click();
 });
+
+fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
 
 async function handleFiles(files) {
     if (!conn || !conn.open) { 
@@ -144,7 +169,7 @@ async function handleFiles(files) {
     }
     if (!files || files.length === 0) return;
 
-    log(`Starting transfer of ${files.length} file(s)...`, 'success');
+    log(` Starting transfer of ${files.length} file(s)...`, 'success');
     fileListEl.innerHTML = '';
 
     const fileItems = [];
@@ -173,6 +198,8 @@ function sendFile(file, statusEl) {
         const chunkSize = 8 * 1024;
         const totalChunks = Math.ceil(file.size / chunkSize);
         let currentChunk = 0;
+
+        log(`📦 Sending: ${file.name} (${formatSize(file.size)})`, 'info');
 
         conn.send({ type: 'file-start', name: file.name, size: file.size, totalChunks });
         statusEl.textContent = 'Sending...';
@@ -220,6 +247,8 @@ function handleIncomingData(data) {
             receivedChunks = new Array(data.totalChunks);
             totalBytesReceived = 0;
             
+            log(`📥 Receiving: ${data.name} (${formatSize(data.size)})`, 'info');
+            
             receiveCard.style.display = 'block';
             const item = document.createElement('div');
             item.className = 'file-card';
@@ -247,6 +276,8 @@ function handleIncomingData(data) {
             if (text) text.textContent = `${pct}%`;
             
         } else if (data.type === 'file-end') {
+            log(`✅ File received complete!`, 'success');
+            
             const text = document.getElementById(`text-${fileCounter}`);
             if (text) { 
                 text.textContent = 'Received - Choose action'; 
@@ -279,6 +310,7 @@ function handleIncomingData(data) {
                 saveBtn.textContent = 'Saved ✓'; 
                 saveBtn.disabled = true; 
                 discardBtn.remove();
+                log(`💾 Saved: ${currentFileMeta.name}`, 'success');
             };
 
             const discardBtn = document.createElement('button');
@@ -286,7 +318,10 @@ function handleIncomingData(data) {
             discardBtn.style.flex = '1'; 
             discardBtn.style.background = 'var(--danger)';
             discardBtn.textContent = '❌ Discard';
-            discardBtn.onclick = () => card.remove();
+            discardBtn.onclick = () => {
+                card.remove();
+                log(`❌ Discarded: ${currentFileMeta.name}`, 'info');
+            };
 
             actionsDiv.appendChild(saveBtn); 
             actionsDiv.appendChild(discardBtn);
