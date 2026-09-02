@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>QR P2P Transfer | Receiver</title>
     <link rel="stylesheet" href="css/style.css">
-    <!-- PeerJS for WebRTC -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body class="receiver-bg">
@@ -17,27 +16,16 @@
 
         <main>
             <!-- State: Connecting -->
-            <section class="card" id="connectingCard">
+            <section class="card" id="loadingCard">
                 <div class="spinner"></div>
                 <p class="center-text">Establishing secure P2P connection...</p>
-                <p class="center-text hint">This may take a few seconds.</p>
             </section>
 
-            <!-- State: Connected, waiting for files -->
-            <section class="card" id="waitingCard" style="display: none;">
-                <div class="spinner"></div>
-                <p class="center-text">Connected! Waiting for sender to select files...</p>
-            </section>
-
-            <!-- State: Receiving file -->
-            <section class="card" id="receivingCard" style="display: none;">
-                <h2>Receiving File</h2>
-                <p class="center-text" id="currentFileName">—</p>
-                <div class="progress-container">
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="receiveProgressFill"></div>
-                    </div>
-                    <p class="progress-text" id="receiveProgressText">0%</p>
+            <!-- State: Receiving Files -->
+            <section class="card" id="filesCard" style="display: none;">
+                <h2>Receiving Stream</h2>
+                <div id="transferLog" class="receiver-file-list">
+                    <!-- Active transfers appear here -->
                 </div>
             </section>
 
@@ -48,7 +36,6 @@
             </section>
         </main>
     </div>
-
     <script src="js/receiver.js"></script>
 </body>
 </html>

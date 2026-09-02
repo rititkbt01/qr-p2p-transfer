@@ -1,15 +1,7 @@
 // sender.js
-// WebRTC P2P file transfer using PeerJS
+// WebRTC P2P Sender Logic
 
 // ── DOM References ──
-const connectionCard = document.getElementById('connectionCard');
-const connectionSpinner = document.getElementById('connectionSpinner');
-const connectionStatus = document.getElementById('connectionStatus');
-const qrSection = document.getElementById('qrSection');
-const fileSection = document.getElementById('fileSection');
-const peerIdDisplay = document.getElementById('peerIdDisplay');
-const urlDisplay = document.getElementById('urlDisplay');
-const receiverStatus = document.getElementById('receiverStatus');
 const fileInput = document.getElementById('fileInput');
 const folderInput = document.getElementById('folderInput');
 const dropZone = document.getElementById('dropZone');
@@ -18,23 +10,18 @@ const dropText = document.getElementById('dropText');
 const fileListEl = document.getElementById('fileList');
 const btnFiles = document.getElementById('btnFiles');
 const btnFolder = document.getElementById('btnFolder');
+const qrWrapper = document.getElementById('qrWrapper');
+const peerIdDisplay = document.getElementById('peerIdDisplay');
+const urlDisplay = document.getElementById('urlDisplay');
+const fileCard = document.getElementById('fileCard');
 const statusLog = document.getElementById('statusLog');
-const transferProgressContainer = document.getElementById('transferProgressContainer');
-const transferProgressFill = document.getElementById('transferProgressFill');
-const transferProgressText = document.getElementById('transferProgressText');
 
 // ── State ──
 let peer = null;
 let conn = null;
 let isFolderMode = false;
-let isReceiverConnected = false;
 
-// ─ Constants ──
-const CHUNK_SIZE = 64 * 1024; // 64KB chunks (safe for WebRTC)
-
-// ──────────────────────────────────────────
-// UTILITY: Logging
-// ──────────────────────────────────────────
+// ─ Utility: Log ──
 function log(msg, type = 'info') {
     const p = document.createElement('p');
     p.textContent = `> ${msg}`;
@@ -44,220 +31,173 @@ function log(msg, type = 'info') {
     statusLog.scrollTop = statusLog.scrollHeight;
 }
 
-// ──────────────────────────────────────────
-// UTILITY: Format file size
-// ──────────────────────────────────────────
+// ── Utility: Format Size ──
 function formatSize(bytes) {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-// ──────────────────────────────────────────
-// INIT: Create PeerJS instance
-// ──────────────────────────────────────────
-function init() {
-    log('Initializing PeerJS...');
-    
-    // Generate a random peer ID
-    const peerId = 'qr-transfer-' + Math.random().toString(36).substring(2, 10);
-    
-    // Create Peer instance (uses PeerJS free cloud servers for signaling)
-    peer = new Peer(peerId);
-    
+// ── 1. Initialize PeerJS ──
+function initPeer() {
+    // Create a new Peer with a random ID (PeerJS cloud handles the signaling)
+    peer = new Peer(); 
+
     peer.on('open', (id) => {
-        log(`Peer ID generated: ${id}`, 'success');
-        peerIdDisplay.textContent = id;
-        
-        // Build the receiver URL
-        const baseUrl = window.location.origin + window.location.pathname.replace('index.html', '');
-        const receiverUrl = `${baseUrl}receiver.html?peerId=${id}`;
-        urlDisplay.textContent = receiverUrl;
-        
-        // Generate QR code
-        document.getElementById('qrcode').innerHTML = '';
-        new QRCode(document.getElementById('qrcode'), {
-            text: receiverUrl,
-            width: 200,
-            height: 200,
-            colorDark: '#1a202c',
-            colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.M
-        });
-        
-        // Show QR section, hide connection spinner
-        connectionCard.style.display = 'none';
-        qrSection.style.display = 'block';
-        log('QR code ready. Waiting for receiver to scan...', 'success');
+        log(`P2P ID generated: ${id}`, 'success');
+        showQRCode(id);
     });
-    
+
+    peer.on('error', (err) => {
+        log(`PeerJS Error: ${err.type}`, 'error');
+    });
+
+    // When a receiver connects
     peer.on('connection', (connection) => {
-        log('Receiver is connecting...', 'info');
         conn = connection;
         
         conn.on('open', () => {
-            log('Receiver connected successfully!', 'success');
-            isReceiverConnected = true;
-            receiverStatus.textContent = '✅ Receiver connected! You can now select files.';
-            receiverStatus.style.color = 'var(--success)';
-            fileSection.style.display = 'block';
+            log('✅ Receiver connected! P2P tunnel established.', 'success');
+            fileCard.style.display = 'block'; // Unlock file selection
+            document.querySelector('#connectionCard h2').textContent = '1. Connection Active';
+            document.querySelector('#connectionCard .instruction').textContent = 'Share files directly to the connected device.';
         });
-        
-        conn.on('data', (data) => {
-            // Handle messages from receiver (e.g., "ready", "error")
-            if (data.type === 'ready') {
-                log('Receiver is ready to receive files.', 'info');
-            }
-        });
-        
-        conn.on('error', (err) => {
-            log(`Connection error: ${err}`, 'error');
-        });
-        
+
         conn.on('close', () => {
-            log('Receiver disconnected.', 'error');
-            isReceiverConnected = false;
-            receiverStatus.textContent = '❌ Receiver disconnected. Please scan QR again.';
-            receiverStatus.style.color = 'var(--danger)';
-            fileSection.style.display = 'none';
+            log('⚠️ Receiver disconnected.', 'error');
+            fileCard.style.display = 'none';
         });
-    });
-    
-    peer.on('error', (err) => {
-        log(`Peer error: ${err.type}`, 'error');
-        connectionStatus.textContent = 'Failed to initialize. Please refresh.';
-        connectionSpinner.style.display = 'none';
     });
 }
 
-// ──────────────────────────────────────────
-// FILE/FOLDER MODE TOGGLE
-// ──────────────────────────────────────────
-btnFiles.addEventListener('click', () => {
-    isFolderMode = false;
-    btnFiles.classList.add('active');
-    btnFolder.classList.remove('active');
-    dropLabel.setAttribute('for', 'fileInput');
-    dropText.textContent = 'Click to browse or drag & drop files here';
-    dropLabel.querySelector('.icon').textContent = '📄';
-});
+// ── 2. Show QR Code ──
+function showQRCode(peerId) {
+    // Construct the public URL (Vercel will provide the domain)
+    // We use window.location.origin to get the current domain automatically
+    const baseUrl = window.location.origin;
+    const receiverUrl = `${baseUrl}/receiver.html?peerId=${peerId}`;
 
-btnFolder.addEventListener('click', () => {
-    isFolderMode = true;
-    btnFolder.classList.add('active');
-    btnFiles.classList.remove('active');
-    dropLabel.setAttribute('for', 'folderInput');
-    dropText.textContent = 'Click to select a folder';
-    dropLabel.querySelector('.icon').textContent = '📁';
-});
+    peerIdDisplay.style.display = 'block';
+    peerIdDisplay.querySelector('strong').textContent = peerId;
+    
+    urlDisplay.style.display = 'block';
+    urlDisplay.textContent = receiverUrl;
 
-// ──────────────────────────────────────────
-// FILE SELECTION HANDLER
-// ──────────────────────────────────────────
-function handleFilesSelected(files) {
-    if (!files || files.length === 0) return;
-    if (!isReceiverConnected) {
-        log('⚠️ Receiver not connected yet. Please wait.', 'error');
+    qrWrapper.style.display = 'flex';
+    document.getElementById('qrcode').innerHTML = '';
+    
+    new QRCode(document.getElementById('qrcode'), {
+        text: receiverUrl,
+        width: 200,
+        height: 200,
+        colorDark: '#1a202c',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+    });
+}
+
+// ── 3. File Selection & Chunking Logic ──
+btnFiles.addEventListener('click', () => setMode(false));
+btnFolder.addEventListener('click', () => setMode(true));
+
+function setMode(isFolder) {
+    isFolderMode = isFolder;
+    btnFiles.classList.toggle('active', !isFolder);
+    btnFolder.classList.toggle('active', isFolder);
+    dropLabel.setAttribute('for', isFolder ? 'folderInput' : 'fileInput');
+    dropText.textContent = isFolder ? 'Click to select a folder' : 'Click to browse or drag & drop files here';
+    dropLabel.querySelector('.icon').textContent = isFolder ? '📁' : '📄';
+}
+
+fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+folderInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+async function handleFiles(files) {
+    if (!conn || !conn.open) {
+        log('❌ No receiver connected!', 'error');
         return;
     }
+    if (!files || files.length === 0) return;
 
-    // Render the list
+    log(`Starting transfer of ${files.length} file(s)...`);
     fileListEl.innerHTML = '';
-    let totalSize = 0;
 
-    Array.from(files).forEach(file => {
-        totalSize += file.size;
-        const div = document.createElement('div');
-        div.className = 'file-item';
-        div.innerHTML = `<span>${file.name}</span><span class="size">${formatSize(file.size)}</span>`;
-        fileListEl.appendChild(div);
-    });
+    // Send files sequentially to avoid overwhelming the connection
+    for (const file of files) {
+        const item = document.createElement('div');
+        item.className = 'file-item';
+        item.innerHTML = `<span>${file.name}</span><span class="size" id="status-${file.name}">Pending</span>`;
+        fileListEl.appendChild(item);
 
-    log(`${files.length} file(s) selected (${formatSize(totalSize)} total). Starting transfer...`);
-
-    // Start P2P transfer
-    sendFiles(files);
+        await sendFile(file, item.querySelector(`#status-${file.name}`));
+    }
+    log('✅ All files sent!', 'success');
 }
 
-fileInput.addEventListener('change', (e) => handleFilesSelected(e.target.files));
-folderInput.addEventListener('change', (e) => handleFilesSelected(e.target.files));
+// The Magic: Chunking and Sending
+function sendFile(file, statusEl) {
+    return new Promise((resolve) => {
+        const chunkSize = 16 * 1024; // 16KB chunks (safe for WebRTC)
+        const totalChunks = Math.ceil(file.size / chunkSize);
+        let currentChunk = 0;
 
-// ──────────────────────────────────────────
-// DRAG & DROP
-// ──────────────────────────────────────────
-dropZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropZone.classList.add('drag-over');
-});
-dropZone.addEventListener('dragleave', () => {
-    dropZone.classList.remove('drag-over');
-});
-dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('drag-over');
-    const target = isFolderMode ? folderInput : fileInput;
-    target.files = e.dataTransfer.files;
-    handleFilesSelected(e.dataTransfer.files);
-});
-
-// ──────────────────────────────────────────
-// P2P FILE TRANSFER WITH CHUNKING
-// ──────────────────────────────────────────
-async function sendFiles(files) {
-    transferProgressContainer.style.display = 'block';
-    transferProgressFill.style.width = '0%';
-    transferProgressFill.classList.remove('complete');
-    transferProgressText.textContent = 'Preparing... 0%';
-
-    const totalFiles = files.length;
-    let filesCompleted = 0;
-
-    for (const file of files) {
-        log(`Sending: ${file.name} (${formatSize(file.size)})`);
-        
-        // Read file as ArrayBuffer
-        const arrayBuffer = await file.arrayBuffer();
-        const totalChunks = Math.ceil(arrayBuffer.byteLength / CHUNK_SIZE);
-        
-        // Send file metadata
+        // 1. Send Metadata
         conn.send({
             type: 'file-start',
             name: file.name,
             size: file.size,
             totalChunks: totalChunks
         });
-        
-        // Send chunks
-        for (let i = 0; i < totalChunks; i++) {
-            const start = i * CHUNK_SIZE;
-            const end = Math.min(start + CHUNK_SIZE, arrayBuffer.byteLength);
-            const chunk = arrayBuffer.slice(start, end);
-            
-            conn.send({
-                type: 'chunk',
-                index: i,
-                data: chunk
-            });
-            
-            // Update progress
-            const overallProgress = ((filesCompleted + (i + 1) / totalChunks) / totalFiles) * 100;
-            const pct = Math.round(overallProgress);
-            transferProgressFill.style.width = pct + '%';
-            transferProgressText.textContent = `Sending ${file.name}... ${pct}%`;
-        }
-        
-        // Send file-end marker
-        conn.send({ type: 'file-end' });
-        
-        filesCompleted++;
-        log(`✅ Sent: ${file.name}`, 'success');
-    }
 
-    transferProgressFill.style.width = '100%';
-    transferProgressFill.classList.add('complete');
-    transferProgressText.textContent = 'All files sent! ✓';
-    log('All files transferred successfully!', 'success');
+        statusEl.textContent = 'Sending...';
+
+        // 2. Recursive Chunk Sender
+        function sendNextChunk() {
+            if (currentChunk >= totalChunks) {
+                conn.send({ type: 'file-end' });
+                statusEl.textContent = 'Done ✓';
+                statusEl.style.color = 'var(--success)';
+                resolve();
+                return;
+            }
+
+            const start = currentChunk * chunkSize;
+            const end = Math.min(start + chunkSize, file.size);
+            const blob = file.slice(start, end);
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                // Send the chunk (ArrayBuffer)
+                conn.send({
+                    type: 'chunk',
+                    index: currentChunk,
+                    data: e.target.result 
+                });
+                
+                currentChunk++;
+                // Simple progress update
+                const pct = Math.round((currentChunk / totalChunks) * 100);
+                statusEl.textContent = `${pct}%`;
+                
+                sendNextChunk(); // Send next
+            };
+            reader.readAsArrayBuffer(blob);
+        }
+
+        sendNextChunk();
+    });
 }
 
-// ── Boot ──
-document.addEventListener('DOMContentLoaded', init);
+// ─ Drag & Drop ──
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('drag-over'); });
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const target = isFolderMode ? folderInput : fileInput;
+    target.files = e.dataTransfer.files;
+    handleFiles(e.dataTransfer.files);
+});
+
+// ─ Boot ──
+document.addEventListener('DOMContentLoaded', initPeer);
