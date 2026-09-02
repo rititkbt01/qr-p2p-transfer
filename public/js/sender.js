@@ -1,4 +1,4 @@
-// sender.js - FINAL WORKING VERSION
+// sender.js - CORRECTED QR API
 
 const fileInput = document.getElementById('fileInput');
 const folderInput = document.getElementById('folderInput');
@@ -81,10 +81,10 @@ function initPeer() {
     });
 }
 
-async function showQRCode(peerId) {
+function showQRCode(peerId) {
     console.log('[QR] Starting QR generation...');
     
-    // Check libraries
+    // Check if QRCode library loaded
     if (typeof QRCode === 'undefined') {
         log('❌ QRCode library not loaded!', 'error');
         return;
@@ -103,21 +103,25 @@ async function showQRCode(peerId) {
         console.log('[QR] Section displayed');
     }
     
-    // Generate QR using canvas
+    // Generate QR using the CORRECT API for qrcodejs library
     try {
-        const canvas = document.getElementById('qrcode');
-        if (!canvas) {
-            log('❌ Canvas not found!', 'error');
+        const qrContainer = document.getElementById('qrcode');
+        if (!qrContainer) {
+            log('❌ QR container not found!', 'error');
             return;
         }
         
-        await QRCode.toCanvas(canvas, receiverUrl, {
+        // Clear any existing QR code
+        qrContainer.innerHTML = '';
+        
+        // Use the CORRECT constructor for qrcodejs library
+        new QRCode(qrContainer, {
+            text: receiverUrl,
             width: 200,
-            margin: 2,
-            color: {
-                dark: '#1a202c',
-                light: '#ffffff'
-            }
+            height: 200,
+            colorDark: '#1a202c',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M
         });
         
         log('✅ QR code generated!', 'success');
