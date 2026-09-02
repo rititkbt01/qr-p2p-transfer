@@ -1,4 +1,4 @@
-// app.js - TRUE BIDIRECTIONAL P2P (FIXED)
+// app.js - TRUE BIDIRECTIONAL P2P (FINAL FIXED VERSION)
 
 // ── DOM References ──
 const hostView = document.getElementById('hostView');
@@ -19,7 +19,7 @@ let peer = null;
 let conn = null;
 let fileCounter = 0;
 
-// ── Utility: Log ─
+// ── Utility: Log ──
 function log(msg, type = 'info') {
     const p = document.createElement('p');
     p.textContent = `> ${msg}`;
@@ -68,7 +68,7 @@ function init() {
 
     // Host listens for incoming connections
     peer.on('connection', (connection) => {
-        log(' Incoming connection received!', 'success');
+        log('📥 Incoming connection received!', 'success');
         setupConnection(connection);
     });
 
@@ -92,7 +92,7 @@ function showQRCode(peerId) {
     log('✅ QR code generated! Share with client.', 'success');
 }
 
-// ─ 3. Client Logic (Connect) ──
+// ── 3. Client Logic (Connect) ──
 function connectToHost(targetId) {
     connectionStatus.textContent = `Connecting to ${targetId.substring(0, 8)}...`;
     log(`📡 Attempting to connect to: ${targetId}`, 'info');
@@ -109,7 +109,6 @@ function connectToHost(targetId) {
         log('✅ Successfully connected to Host!', 'success');
         connectionStatus.textContent = '✅ Connected!';
         connectionStatus.style.color = 'var(--success)';
-        // Enable send capability on client
         enableSendReceive();
     });
     
@@ -125,13 +124,11 @@ function setupConnection(connection) {
     conn = connection;
     log('🔧 Setting up bidirectional connection...', 'info');
     
-    // When connection opens
     conn.on('open', () => {
         log('✅ Connection stream opened!', 'success');
         enableSendReceive();
     });
 
-    // Listen for incoming data (files) on BOTH devices
     conn.on('data', handleIncomingData);
     
     conn.on('close', () => {
@@ -169,7 +166,7 @@ async function handleFiles(files) {
     }
     if (!files || files.length === 0) return;
 
-    log(` Starting transfer of ${files.length} file(s)...`, 'success');
+    log(`📤 Starting transfer of ${files.length} file(s)...`, 'success');
     fileListEl.innerHTML = '';
 
     const fileItems = [];
@@ -228,6 +225,11 @@ function sendFile(file, statusEl) {
                 statusEl.textContent = `${Math.round((currentChunk / totalChunks) * 100)}%`;
                 setTimeout(sendNextChunk, 5);
             };
+            reader.onerror = () => {
+                log(`❌ Error reading file chunk`, 'error');
+                statusEl.textContent = 'Error ✗';
+                resolve();
+            };
             reader.readAsArrayBuffer(blob);
         }
         sendNextChunk();
@@ -285,54 +287,84 @@ function handleIncomingData(data) {
             }
             
             const card = document.getElementById(`card-${fileCounter}`);
+            
+            // ✅ CRITICAL FIX: Capture filename locally BEFORE resetting state
+            const fileName = currentFileMeta ? currentFileMeta.name : 'downloaded_file';
+            
+            // Create blob immediately
             const validChunks = receivedChunks.filter(c => c !== undefined);
-            const blob = new Blob(validChunks);
+            const fileBlob = new Blob(validChunks);
+            log(`💾 Blob created: ${formatSize(fileBlob.size)} bytes`, 'success');
             
             const actionsDiv = document.createElement('div');
             actionsDiv.style.display = 'flex'; 
             actionsDiv.style.gap = '10px'; 
             actionsDiv.style.marginTop = '12px';
 
+            // SAVE BUTTON
             const saveBtn = document.createElement('button');
             saveBtn.className = 'btn-download'; 
             saveBtn.style.flex = '1'; 
             saveBtn.style.background = 'var(--success)';
             saveBtn.textContent = '💾 Save';
+            
             saveBtn.onclick = () => {
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); 
-                a.href = url; 
-                a.download = currentFileMeta.name;
-                document.body.appendChild(a); 
-                a.click(); 
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                saveBtn.textContent = 'Saved ✓'; 
-                saveBtn.disabled = true; 
-                discardBtn.remove();
-                log(`💾 Saved: ${currentFileMeta.name}`, 'success');
+                try {
+                    log(`💾 Attempting to save: ${fileName}`, 'info');
+                    const url = URL.createObjectURL(fileBlob);
+                    const a = document.createElement('a'); 
+                    a.href = url; 
+                    a.download = fileName; // Uses the safely captured local variable
+                    a.style.display = 'none';
+                    
+                    document.body.appendChild(a); 
+                    a.click(); 
+                    document.body.removeChild(a);
+                    
+                    // Clean up URL after a short delay to ensure download starts
+                    setTimeout(() => {
+                        URL.revokeObjectURL(url);
+                    }, 100);
+                    
+                    saveBtn.textContent = 'Saved ✓'; 
+                    saveBtn.disabled = true; 
+                    saveBtn.style.background = '#2f855a';
+                    saveBtn.style.cursor = 'default';
+                    
+                    if (typeof discardBtn !== 'undefined' && discardBtn) {
+                        discardBtn.remove();
+                    }
+                    log(`✅ File saved successfully!`, 'success');
+                } catch (err) {
+                    log(`❌ Save error: ${err.message}`, 'error');
+                    console.error('Save error details:', err);
+                }
             };
 
+            // DISCARD BUTTON
             const discardBtn = document.createElement('button');
             discardBtn.className = 'btn-download'; 
             discardBtn.style.flex = '1'; 
             discardBtn.style.background = 'var(--danger)';
             discardBtn.textContent = '❌ Discard';
+            
             discardBtn.onclick = () => {
                 card.remove();
-                log(`❌ Discarded: ${currentFileMeta.name}`, 'info');
+                log(`❌ Discarded: ${fileName}`, 'info');
             };
 
             actionsDiv.appendChild(saveBtn); 
             actionsDiv.appendChild(discardBtn);
             card.appendChild(actionsDiv);
             
+            // Reset for next file (Safe now because fileName is captured locally above)
             currentFileMeta = null; 
             receivedChunks = []; 
             totalBytesReceived = 0;
         }
     } catch (err) { 
-        log(`ERROR: ${err.message}`, 'error'); 
+        log(`ERROR in handleIncomingData: ${err.message}`, 'error');
+        console.error('Full error:', err);
     }
 }
 
