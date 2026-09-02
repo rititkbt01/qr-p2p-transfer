@@ -1,10 +1,10 @@
-// receiver.js - PERFECTLY MATCHED TO YOUR HTML
+// receiver.js - WITH MANUAL SAVE/DISCARD CONTROL
 
-// ── DOM References (Exactly matching your receiver.html) ─
+// ─ DOM References (Exactly matching your receiver.html) ─
 const connectionStatus = document.getElementById('connectionStatus');
-const loadingCard = document.getElementById('loadingCard'); // ✅ MATCHED
-const filesCard = document.getElementById('filesCard'); // ✅ MATCHED
-const transferLog = document.getElementById('transferLog'); // ✅ MATCHED
+const loadingCard = document.getElementById('loadingCard');
+const filesCard = document.getElementById('filesCard');
+const transferLog = document.getElementById('transferLog');
 const errorCard = document.getElementById('errorCard');
 const errorMessage = document.getElementById('errorMessage');
 const retryBtn = document.getElementById('retryBtn');
@@ -18,6 +18,7 @@ let conn = null;
 let currentFileMeta = null;
 let receivedChunks = [];
 let totalBytesReceived = 0;
+let fileCounter = 0; // ✅ Unique counter to avoid ID conflicts with special characters
 
 if (!senderPeerId) {
     showError('Invalid link. No Peer ID found in URL.');
@@ -42,15 +43,14 @@ function connectToSender(targetId) {
     peer.on('open', () => {
         connectionStatus.textContent = `Connecting to ${targetId.substring(0, 8)}...`;
         
-        // reliable: true ensures ordered delivery of chunks
         conn = peer.connect(targetId, { reliable: true, serialization: 'json' });
 
         conn.on('open', () => {
             log('✅ Connected to sender!');
             connectionStatus.textContent = '✅ Connected! Waiting for files...';
             connectionStatus.style.color = 'var(--success)';
-            loadingCard.style.display = 'none'; // ✅ Using correct ID
-            filesCard.style.display = 'block'; // ✅ Using correct ID
+            loadingCard.style.display = 'none';
+            filesCard.style.display = 'block';
         });
 
         conn.on('data', handleData);
@@ -76,17 +76,19 @@ function connectToSender(targetId) {
 function handleData(data) {
     try {
         if (data.type === 'file-start') {
-            log(`📥 Receiving: ${data.name} (${formatSize(data.size)})`);
+            log(` Receiving: ${data.name} (${formatSize(data.size)})`);
             currentFileMeta = data;
             receivedChunks = new Array(data.totalChunks);
             totalBytesReceived = 0;
+            fileCounter++; // ✅ Increment counter for unique IDs
             
-            filesCard.style.display = 'block'; // ✅ Show files card
-            transferLog.innerHTML = ''; // Clear previous transfers
+            filesCard.style.display = 'block';
             
             // Create UI element for this transfer
             const item = document.createElement('div');
             item.className = 'file-card';
+            item.id = `card-${fileCounter}`; // ✅ Use counter instead of filename
+            
             item.innerHTML = `
                 <div class="file-card-header">
                     <span class="file-name">${data.name}</span>
@@ -94,9 +96,9 @@ function handleData(data) {
                 </div>
                 <div class="progress-container">
                     <div class="progress-bar">
-                        <div class="progress-fill" id="fill-${data.name}"></div>
+                        <div class="progress-fill" id="fill-${fileCounter}"></div>
                     </div>
-                    <p class="progress-text" id="text-${data.name}">0%</p>
+                    <p class="progress-text" id="text-${fileCounter}">0%</p>
                 </div>
             `;
             transferLog.appendChild(item);
@@ -114,33 +116,70 @@ function handleData(data) {
             // Update Progress
             const pct = Math.min(100, Math.round((totalBytesReceived / currentFileMeta.size) * 100));
             
-            const fill = document.getElementById(`fill-${currentFileMeta.name}`);
-            const text = document.getElementById(`text-${currentFileMeta.name}`);
+            const fill = document.getElementById(`fill-${fileCounter}`);
+            const text = document.getElementById(`text-${fileCounter}`);
             if (fill) fill.style.width = `${pct}%`;
             if (text) text.textContent = `${pct}%`;
             
         } else if (data.type === 'file-end') {
-            log(`✅ File complete! Assembling...`);
+            log(`✅ File complete! Waiting for user action...`);
             
             // Filter out any undefined chunks (safety check)
             const validChunks = receivedChunks.filter(chunk => chunk !== undefined);
             const blob = new Blob(validChunks);
             
-            log(`Downloaded ${formatSize(blob.size)} bytes`);
-            triggerDownload(blob, currentFileMeta.name);
-            
-            const text = document.getElementById(`text-${currentFileMeta.name}`);
+            const text = document.getElementById(`text-${fileCounter}`);
             if (text) {
-                text.textContent = 'Complete ✓';
-                text.style.color = 'var(--success)';
+                text.textContent = 'Received - Choose action';
+                text.style.color = 'var(--accent)';
             }
             
-            // Reset for next file after a brief pause
-            setTimeout(() => {
-                currentFileMeta = null;
-                receivedChunks = [];
-                totalBytesReceived = 0;
-            }, 1500);
+            // ✅ Add Save and Discard buttons
+            const card = document.getElementById(`card-${fileCounter}`);
+            if (card) {
+                const actionsDiv = document.createElement('div');
+                actionsDiv.style.display = 'flex';
+                actionsDiv.style.gap = '10px';
+                actionsDiv.style.marginTop = '12px';
+
+                // SAVE BUTTON
+                const saveBtn = document.createElement('button');
+                saveBtn.className = 'btn-download';
+                saveBtn.style.flex = '1';
+                saveBtn.style.background = 'var(--success)';
+                saveBtn.textContent = '💾 Save';
+                
+                saveBtn.onclick = () => {
+                    triggerDownload(blob, currentFileMeta.name);
+                    saveBtn.textContent = 'Saved ✓';
+                    saveBtn.disabled = true;
+                    saveBtn.style.background = '#2f855a';
+                    saveBtn.style.cursor = 'default';
+                    discardBtn.remove();
+                    log(`✅ Saved: ${currentFileMeta.name}`);
+                };
+
+                // DISCARD BUTTON
+                const discardBtn = document.createElement('button');
+                discardBtn.className = 'btn-download';
+                discardBtn.style.flex = '1';
+                discardBtn.style.background = 'var(--danger)';
+                discardBtn.textContent = '❌ Discard';
+                
+                discardBtn.onclick = () => {
+                    card.remove();
+                    log(`❌ Discarded: ${currentFileMeta.name}`);
+                };
+
+                actionsDiv.appendChild(saveBtn);
+                actionsDiv.appendChild(discardBtn);
+                card.appendChild(actionsDiv);
+            }
+            
+            // Reset for next file
+            currentFileMeta = null;
+            receivedChunks = [];
+            totalBytesReceived = 0;
         }
     } catch (err) {
         log(`ERROR handling data: ${err.message}`);
@@ -148,7 +187,7 @@ function handleData(data) {
     }
 }
 
-// ── 3. Trigger Native Download ──
+// ── 3. Trigger Native Download (Only when "Save" is clicked) ──
 function triggerDownload(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -158,7 +197,6 @@ function triggerDownload(blob, filename) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url); // Free memory immediately
-    log(`✅ Saved: ${filename}`);
 }
 
 // ─ Utilities ──
