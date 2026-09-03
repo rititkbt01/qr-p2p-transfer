@@ -33,20 +33,17 @@
                 </div>
             </section>
 
-            <!-- 2. SEND FILES/FOLDER CARD (Hidden until connected) -->
+            <!-- 2. SEND FILES/FOLDER CARD -->
             <section class="card" id="sendCard" style="display: none;">
                 <h2>2. Send Files or Folder</h2>
                 
-                <!-- Mode Toggle Buttons -->
                 <div class="mode-toggle">
                     <button class="toggle-btn active" id="btnFiles" type="button">📄 Files</button>
                     <button class="toggle-btn" id="btnFolder" type="button">📁 Folder</button>
                 </div>
 
                 <div class="drop-zone" id="dropZone">
-                    <!-- Standard File Input -->
                     <input type="file" id="fileInput" multiple hidden>
-                    <!-- Folder Input (webkitdirectory allows folder selection) -->
                     <input type="file" id="folderInput" webkitdirectory hidden>
                     
                     <label for="fileInput" class="drop-label" id="dropLabel">
@@ -54,10 +51,16 @@
                         <span id="dropText">Click to browse or drag & drop files here</span>
                     </label>
                 </div>
+                
+                <!-- Mobile Hint -->
+                <p class="center-text" style="font-size: 0.8rem; color: var(--text-dim); margin-top: 12px;">
+                    💡 Note: Folder selection is for desktop. Mobile users can select multiple files.
+                </p>
+                
                 <div id="fileList" class="file-list"></div>
             </section>
 
-            <!-- 3. RECEIVE FILES CARD (Hidden until files arrive) -->
+            <!-- 3. RECEIVE FILES CARD -->
             <section class="card" id="receiveCard" style="display: none;">
                 <h2>3. Receiving Files</h2>
                 <div id="transferLog" class="receiver-file-list"></div>

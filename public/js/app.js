@@ -1,4 +1,4 @@
-// app.js - TRUE BIDIRECTIONAL P2P (WITH FOLDER SUPPORT)
+// app.js - TRUE BIDIRECTIONAL P2P (ROBUST & PRODUCTION-READY)
 
 // ── DOM References ──
 const hostView = document.getElementById('hostView');
@@ -9,22 +9,21 @@ const connectionStatus = document.getElementById('connectionStatus');
 const sendCard = document.getElementById('sendCard');
 const receiveCard = document.getElementById('receiveCard');
 const fileInput = document.getElementById('fileInput');
-const folderInput = document.getElementById('folderInput'); // NEW
+const folderInput = document.getElementById('folderInput');
 const fileListEl = document.getElementById('fileList');
 const transferLog = document.getElementById('transferLog');
 const statusLog = document.getElementById('statusLog');
-const dropZone = document.getElementById('dropZone');
-const btnFiles = document.getElementById('btnFiles'); // NEW
-const btnFolder = document.getElementById('btnFolder'); // NEW
-const dropLabel = document.getElementById('dropLabel'); // NEW
-const dropText = document.getElementById('dropText'); // NEW
+const btnFiles = document.getElementById('btnFiles');
+const btnFolder = document.getElementById('btnFolder');
+const dropLabel = document.getElementById('dropLabel');
+const dropText = document.getElementById('dropText');
 
 // ── State ──
 let peer = null;
 let conn = null;
 let fileCounter = 0;
 let isConnectionReady = false;
-let isFolderMode = false; // NEW: Track current mode
+let isFolderMode = false;
 
 // ── Utility: Log ──
 function log(msg, type = 'info') {
@@ -54,19 +53,16 @@ function init() {
 
     peer.on('open', (id) => {
         log(`P2P ID generated: ${id}`, 'success');
-        
         const params = new URLSearchParams(window.location.search);
         const targetPeerId = params.get('peerId');
 
         if (targetPeerId) {
             clientView.style.display = 'block';
             hostView.style.display = 'none';
-            log('Mode: Client (connecting to host)', 'info');
             connectToHost(targetPeerId);
         } else {
             hostView.style.display = 'block';
             clientView.style.display = 'none';
-            log('Mode: Host (waiting for client)', 'info');
             showQRCode(id);
         }
     });
@@ -99,7 +95,6 @@ function showQRCode(peerId) {
 // ── 3. Client Logic (Connect) ──
 function connectToHost(targetId) {
     connectionStatus.textContent = `Connecting to ${targetId.substring(0, 8)}...`;
-    log(`📡 Attempting to connect to: ${targetId}`, 'info');
     
     const connection = peer.connect(targetId, { 
         reliable: true, 
@@ -126,7 +121,6 @@ function connectToHost(targetId) {
 // ── 4. Setup Connection (Called by BOTH Host and Client) ──
 function setupConnection(connection) {
     conn = connection;
-    log('🔧 Setting up bidirectional connection...', 'info');
     
     conn.on('open', () => {
         log('✅ Connection stream opened!', 'success');
@@ -148,61 +142,46 @@ function setupConnection(connection) {
     });
 }
 
-// ── Enable Send/Receive on BOTH Devices ──
 function enableSendReceive() {
     log('🚀 Enabling Send & Receive capabilities...', 'success');
     sendCard.style.display = 'block';
-    log('✅ You can now SEND and RECEIVE files!', 'success');
 }
 
-// ── 5. MODE TOGGLE LOGIC (NEW) ──
+// ── 5. MODE TOGGLE LOGIC ──
 btnFiles.addEventListener('click', () => setMode(false));
 btnFolder.addEventListener('click', () => setMode(true));
 
 function setMode(isFolder) {
     isFolderMode = isFolder;
-    
     if (isFolder) {
         btnFolder.classList.add('active');
         btnFiles.classList.remove('active');
-        dropLabel.setAttribute('for', 'folderInput'); // Link label to folder input
+        dropLabel.setAttribute('for', 'folderInput');
         dropText.textContent = 'Click to select a folder';
         dropLabel.querySelector('.icon').textContent = '📁';
-        log('Mode switched to: Folder', 'info');
     } else {
         btnFiles.classList.add('active');
         btnFolder.classList.remove('active');
-        dropLabel.setAttribute('for', 'fileInput'); // Link label to file input
+        dropLabel.setAttribute('for', 'fileInput');
         dropText.textContent = 'Click to browse or drag & drop files here';
         dropLabel.querySelector('.icon').textContent = '📄';
-        log('Mode switched to: Files', 'info');
     }
 }
 
-// ── 6. SENDING LOGIC ──
-
-// Handle File Selection
+// ── 6. SENDING LOGIC (ROBUST) ──
 fileInput.addEventListener('change', (e) => {
-    log(`📂 Files selected: ${e.target.files.length}`, 'info');
     handleFiles(e.target.files);
-    fileInput.value = ''; // Reset
+    fileInput.value = '';
 });
 
-// Handle Folder Selection (NEW)
 folderInput.addEventListener('change', (e) => {
-    log(`📁 Folder selected: ${e.target.files.length} files found`, 'info');
     handleFiles(e.target.files);
-    folderInput.value = ''; // Reset
+    folderInput.value = '';
 });
 
 async function handleFiles(files) {
-    if (!isConnectionReady) { 
-        log('❌ Connection not ready!', 'error'); 
-        return; 
-    }
-    
-    if (!conn || !conn.open) { 
-        log('❌ Connection closed!', 'error'); 
+    if (!isConnectionReady || !conn || !conn.open) { 
+        log('❌ Connection not ready or lost!', 'error'); 
         isConnectionReady = false;
         return; 
     }
@@ -214,8 +193,7 @@ async function handleFiles(files) {
 
     const fileItems = [];
     for (const file of files) {
-        // Skip empty directory placeholders created by webkitdirectory
-        if (file.size === 0 && file.name.endsWith('/')) continue;
+        if (file.size === 0 && file.name.endsWith('/')) continue; // Skip empty dir placeholders
 
         const item = document.createElement('div');
         item.className = 'file-item';
@@ -230,16 +208,30 @@ async function handleFiles(files) {
         fileItems.push({ file, statusEl: statusSpan });
     }
 
+    // Process sequentially with error handling
     for (const { file, statusEl } of fileItems) {
-        await sendFile(file, statusEl);
+        try {
+            await sendFile(file, statusEl);
+        } catch (err) {
+            log(`❌ Transfer interrupted: ${err.message}`, 'error');
+            statusEl.textContent = 'Failed ✗';
+            statusEl.style.color = 'var(--danger)';
+            break; // Stop the loop if one file fails to prevent cascade errors
+        }
     }
-    log('✅ All items sent!', 'success');
+    log('✅ Transfer session complete!', 'success');
 }
 
 function sendFile(file, statusEl) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+        if (!conn || !conn.open) {
+            statusEl.textContent = 'No connection ✗';
+            return reject(new Error('Not connected'));
+        }
+
         const chunkSize = 16 * 1024; 
-        const totalChunks = Math.ceil(file.size / chunkSize);
+        // Ensure at least 1 chunk for 0-byte files
+        const totalChunks = Math.max(1, Math.ceil(file.size / chunkSize));
         let currentChunk = 0;
 
         log(`📦 Sending: ${file.name} (${formatSize(file.size)})`, 'info');
@@ -249,17 +241,29 @@ function sendFile(file, statusEl) {
             statusEl.textContent = 'Sending...';
 
             function sendNextChunk() {
+                if (!conn || !conn.open) {
+                    statusEl.textContent = 'Disconnected ✗';
+                    return reject(new Error('Connection lost during transfer'));
+                }
+
                 if (currentChunk >= totalChunks) {
                     conn.send({ type: 'file-end', name: file.name });
                     statusEl.textContent = 'Done ✓'; 
                     statusEl.style.color = 'var(--success)';
-                    resolve(); 
-                    return;
+                    return resolve(); 
                 }
                 
+                // Flow control: pause if buffer gets too full
                 if (conn.bufferedAmount > 1024 * 1024) { 
                     setTimeout(sendNextChunk, 50); 
                     return; 
+                }
+
+                // Handle 0-byte files gracefully
+                if (file.size === 0) {
+                    currentChunk++;
+                    sendNextChunk();
+                    return;
                 }
 
                 const start = currentChunk * chunkSize;
@@ -274,30 +278,27 @@ function sendFile(file, statusEl) {
                         statusEl.textContent = `${Math.round((currentChunk / totalChunks) * 100)}%`;
                         setTimeout(sendNextChunk, 5);
                     } catch (err) {
-                        log(`❌ Error sending chunk: ${err.message}`, 'error');
                         statusEl.textContent = 'Error ✗';
-                        resolve();
+                        reject(new Error('Send failed'));
                     }
                 };
                 
                 reader.onerror = () => {
-                    log(`❌ Error reading file chunk`, 'error');
-                    statusEl.textContent = 'Error ✗';
-                    resolve();
+                    statusEl.textContent = 'Read Error ✗';
+                    reject(new Error('File read error'));
                 };
                 
                 reader.readAsArrayBuffer(blob);
             }
             sendNextChunk();
         } catch (err) {
-            log(`❌ Error starting file send: ${err.message}`, 'error');
             statusEl.textContent = 'Error ✗';
-            resolve();
+            reject(err);
         }
     });
 }
 
-// ── 7. RECEIVING Logic ──
+// ── 7. RECEIVING Logic (ROBUST) ──
 let currentFileMeta = null;
 let receivedChunks = [];
 let totalBytesReceived = 0;
@@ -355,8 +356,6 @@ function handleIncomingData(data) {
             const validChunks = receivedChunks.filter(c => c !== undefined);
             const fileBlob = new Blob(validChunks);
             
-            log(`💾 Blob created: ${formatSize(fileBlob.size)} bytes`, 'success');
-            
             const actionsDiv = document.createElement('div');
             actionsDiv.style.display = 'flex'; 
             actionsDiv.style.gap = '10px'; 
@@ -370,7 +369,6 @@ function handleIncomingData(data) {
             
             saveBtn.onclick = () => {
                 try {
-                    log(`💾 Attempting to save: ${fileName}`, 'info');
                     const url = URL.createObjectURL(fileBlob);
                     const a = document.createElement('a'); 
                     a.href = url; 
@@ -381,22 +379,17 @@ function handleIncomingData(data) {
                     a.click(); 
                     document.body.removeChild(a);
                     
-                    setTimeout(() => {
-                        URL.revokeObjectURL(url);
-                    }, 100);
+                    setTimeout(() => URL.revokeObjectURL(url), 100);
                     
                     saveBtn.textContent = 'Saved ✓'; 
                     saveBtn.disabled = true; 
                     saveBtn.style.background = '#2f855a';
                     saveBtn.style.cursor = 'default';
+                    if (typeof discardBtn !== 'undefined' && discardBtn) discardBtn.remove();
                     
-                    if (typeof discardBtn !== 'undefined' && discardBtn) {
-                        discardBtn.remove();
-                    }
                     log(`✅ File saved successfully!`, 'success');
                 } catch (err) {
                     log(`❌ Save error: ${err.message}`, 'error');
-                    console.error('Save error details:', err);
                 }
             };
 
@@ -415,6 +408,7 @@ function handleIncomingData(data) {
             actionsDiv.appendChild(discardBtn);
             card.appendChild(actionsDiv);
             
+            // Reset state for the next file
             currentFileMeta = null; 
             receivedChunks = []; 
             totalBytesReceived = 0;
