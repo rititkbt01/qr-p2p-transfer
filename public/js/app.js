@@ -1,11 +1,11 @@
-// app.js - PRODUCTION READY WITH ERROR HANDLING
+// app.js - COMPLETE PRODUCTION READY VERSION
 
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
 // DOM REFERENCES
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
 const $ = id => {
     const el = document.getElementById(id);
-    if (!el) console.error(`Element #${id} not found!`);
+    if (!el) console.warn(`Element #${id} not found!`);
     return el;
 };
 
@@ -33,10 +33,12 @@ const clearHistoryBtn = $('clearHistoryBtn');
 const qrWrapper = $('qrWrapper');
 const qrcodeDiv = $('qrcode');
 const hostStatus = $('hostStatus');
+const hostModeBtn = $('hostModeBtn');
+const clientModeBtn = $('clientModeBtn');
 
-// ═══════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
+// STATE & CONSTANTS
+// ═══════════════════════════════════════════
 let peer = null;
 let conn = null;
 let isConnectionReady = false;
@@ -44,11 +46,11 @@ let isHost = false;
 let currentRoomCode = null;
 let receivedFiles = [];
 const PEER_PREFIX = 'qrlan-';
-const ROOM_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // No 0/O, 1/I/L
+const ROOM_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // No confusing chars (0/O, 1/I/L)
 
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
 // TABS LOGIC
-// ══════════════════════════════════════
+// ═══════════════════════════════════════════
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.tab-btn').forEach(b => {
@@ -59,21 +61,44 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         
         btn.classList.add('active');
         btn.setAttribute('aria-selected', 'true');
-        const tabId = `tab-${btn.dataset.tab}`;
-        const tabContent = document.getElementById(tabId);
+        const tabContent = document.getElementById(`tab-${btn.dataset.tab}`);
         if (tabContent) tabContent.classList.add('active');
     });
 });
 
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
+// MODE TOGGLE LOGIC
+// ═══════════════════════════════════════════
+function setHostMode() {
+    if (hostModeBtn) hostModeBtn.classList.add('active');
+    if (clientModeBtn) clientModeBtn.classList.remove('active');
+    if (hostView) hostView.style.display = 'block';
+    if (clientView) clientView.style.display = 'none';
+    isHost = true;
+    if (!peer) startHost();
+}
+
+function setClientMode() {
+    if (clientModeBtn) clientModeBtn.classList.add('active');
+    if (hostModeBtn) hostModeBtn.classList.remove('active');
+    if (clientView) clientView.style.display = 'block';
+    if (hostView) hostView.style.display = 'none';
+    isHost = false;
+    if (peer) {
+        peer.destroy();
+        peer = null;
+    }
+}
+
+if (hostModeBtn) hostModeBtn.onclick = setHostMode;
+if (clientModeBtn) clientModeBtn.onclick = setClientMode;
+
+// ═══════════════════════════════════════════
 // UTILITIES
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
 function log(msg, type = 'info') {
     console.log(`[${type.toUpperCase()}] ${msg}`);
-    // Also show in UI if status element exists
-    if (hostStatus && isHost) {
-        hostStatus.textContent = msg;
-    }
+    if (hostStatus && isHost) hostStatus.textContent = msg;
 }
 
 function formatSize(bytes) {
@@ -91,16 +116,19 @@ function generateRoomCode() {
     return code;
 }
 
-// ═══════════════════════════════════════
-// LOCALSTORAGE
-// ═══════════════════════════════════════
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// ═══════════════════════════════════════════
+// LOCALSTORAGE MANAGEMENT
+// ═══════════════════════════════════════════
 const Storage = {
     getDevices: () => {
-        try {
-            return JSON.parse(localStorage.getItem('p2p_devices') || '[]');
-        } catch {
-            return [];
-        }
+        try { return JSON.parse(localStorage.getItem('p2p_devices') || '[]'); } 
+        catch { return []; }
     },
     saveDevice: (device) => {
         try {
@@ -113,56 +141,42 @@ const Storage = {
             }
             localStorage.setItem('p2p_devices', JSON.stringify(devices));
             renderSavedDevices();
-        } catch (err) {
-            console.error('Failed to save device:', err);
-        }
+        } catch (err) { console.error('Save device error:', err); }
     },
     removeDevice: (code) => {
         try {
-            const devices = Storage.getDevices().filter(d => d.code !== code);
-            localStorage.setItem('p2p_devices', JSON.stringify(devices));
+            localStorage.setItem('p2p_devices', JSON.stringify(Storage.getDevices().filter(d => d.code !== code)));
             renderSavedDevices();
-        } catch (err) {
-            console.error('Failed to remove device:', err);
-        }
+        } catch (err) { console.error('Remove device error:', err); }
     },
     getHistory: () => {
-        try {
-            return JSON.parse(localStorage.getItem('p2p_history') || '[]');
-        } catch {
-            return [];
-        }
+        try { return JSON.parse(localStorage.getItem('p2p_history') || '[]'); } 
+        catch { return []; }
     },
     addHistory: (item) => {
         try {
             const history = Storage.getHistory();
             history.unshift({ ...item, date: Date.now() });
-            localStorage.setItem('p2p_history', JSON.stringify(history.slice(0, 50)));
+            localStorage.setItem('p2p_history', JSON.stringify(history.slice(0, 50))); // Keep last 50
             renderHistory();
-        } catch (err) {
-            console.error('Failed to add history:', err);
-        }
+        } catch (err) { console.error('Add history error:', err); }
     },
     clearHistory: () => {
-        try {
-            localStorage.removeItem('p2p_history');
-            renderHistory();
-        } catch (err) {
-            console.error('Failed to clear history:', err);
-        }
+        try { 
+            localStorage.removeItem('p2p_history'); 
+            renderHistory(); 
+        } catch (err) { console.error('Clear history error:', err); }
     }
 };
 
 function renderSavedDevices() {
     if (!savedDevicesList || !noDevicesHint) return;
-    
     const devices = Storage.getDevices();
     if (devices.length === 0) { 
         noDevicesHint.style.display = 'block'; 
         savedDevicesList.innerHTML = ''; 
         return; 
     }
-    
     noDevicesHint.style.display = 'none';
     savedDevicesList.innerHTML = devices.map(d => `
         <div class="saved-device-item">
@@ -178,13 +192,11 @@ function renderSavedDevices() {
 
 function renderHistory() {
     if (!historyList) return;
-    
     const history = Storage.getHistory();
     if (history.length === 0) { 
         historyList.innerHTML = '<p class="hint">No history yet.</p>'; 
         return; 
     }
-    
     historyList.innerHTML = history.map(h => `
         <div class="history-item">
             <span class="history-icon">${h.type === 'sent' ? '📤' : '📥'}</span>
@@ -196,42 +208,31 @@ function renderHistory() {
     `).join('');
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
 // INITIALIZATION
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
 function init() {
     try {
         const params = new URLSearchParams(window.location.search);
         const urlRoom = params.get('room');
 
         if (urlRoom) {
-            // CLIENT MODE
-            if (clientView) clientView.style.display = 'block';
-            if (hostView) hostView.style.display = 'none';
+            // CLIENT MODE (via URL parameter)
+            setClientMode();
             if (roomInputGroup) roomInputGroup.style.display = 'none';
             if (clientSpinner) clientSpinner.style.display = 'block';
             if (connectionStatus) connectionStatus.textContent = `Joining ${urlRoom}...`;
-            
             setTimeout(() => joinRoom(urlRoom), 500);
         } else {
-            // HOST MODE
-            if (hostView) hostView.style.display = 'block';
-            if (clientView) clientView.style.display = 'none';
-            isHost = true;
-            startHost();
+            // HOST MODE (default)
+            setHostMode();
         }
-        
         renderSavedDevices();
         renderHistory();
     } catch (err) {
         console.error('Initialization error:', err);
         log('Failed to initialize', 'error');
+        setHostMode(); // Fallback
     }
 }
 
@@ -239,10 +240,8 @@ function startHost() {
     try {
         currentRoomCode = generateRoomCode();
         if (roomCodeDisplay) roomCodeDisplay.textContent = currentRoomCode;
-        
-        const peerId = `${PEER_PREFIX}${currentRoomCode}`;
         log(`Generated room: ${currentRoomCode}`);
-        createPeer(peerId);
+        createPeer(`${PEER_PREFIX}${currentRoomCode}`);
     } catch (err) {
         console.error('Start host error:', err);
         log('Failed to start host', 'error');
@@ -251,10 +250,9 @@ function startHost() {
 
 function createPeer(peerId) {
     try {
-        if (!window.Peer) {
-            console.error('PeerJS library not loaded!');
-            log('Error: PeerJS not loaded', 'error');
-            return;
+        if (!window.Peer) { 
+            log('Error: PeerJS library not loaded', 'error'); 
+            return; 
         }
         
         peer = new Peer(peerId, { 
@@ -272,7 +270,6 @@ function createPeer(peerId) {
             if (isHost && qrWrapper && qrcodeDiv) {
                 qrWrapper.style.display = 'flex';
                 qrcodeDiv.innerHTML = '';
-                
                 if (window.QRCode) {
                     new QRCode(qrcodeDiv, { 
                         text: `${window.location.origin}/?room=${currentRoomCode}`, 
@@ -288,15 +285,16 @@ function createPeer(peerId) {
             }
         });
 
-        peer.on('connection', (connection) => {
-            log('Incoming connection!', 'success');
-            setupConnection(connection);
+        peer.on('connection', (connection) => { 
+            log('Incoming connection!', 'success'); 
+            setupConnection(connection); 
         });
         
         peer.on('error', (err) => {
             console.error('Peer error:', err);
             log(`Error: ${err.type}`, 'error');
             
+            // Auto-retry if room code collision
             if (err.type === 'unavailable-id' && isHost) {
                 log('Room code taken, generating new...', 'info');
                 currentRoomCode = generateRoomCode();
@@ -307,23 +305,19 @@ function createPeer(peerId) {
                 }, 1000);
             }
         });
-        
-        peer.on('disconnected', () => {
-            log('Disconnected from PeerJS server', 'error');
-        });
-    } catch (err) {
-        console.error('Create peer error:', err);
-        log('Failed to create peer', 'error');
+    } catch (err) { 
+        console.error('Create peer error:', err); 
+        log('Failed to create peer', 'error'); 
     }
 }
 
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
 // JOIN ROOM (CLIENT)
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
 window.joinRoom = function(code) {
-    if (!code || code.length < 6) {
-        log('Invalid room code', 'error');
-        return;
+    if (!code || code.length < 6) { 
+        log('Invalid room code', 'error'); 
+        return; 
     }
     
     code = code.toUpperCase().trim();
@@ -333,9 +327,9 @@ window.joinRoom = function(code) {
         if (clientSpinner) clientSpinner.style.display = 'block';
         if (roomInputGroup) roomInputGroup.style.display = 'none';
 
-        if (!window.Peer) {
-            log('PeerJS not loaded', 'error');
-            return;
+        if (!window.Peer) { 
+            log('PeerJS not loaded', 'error'); 
+            return; 
         }
 
         peer = new Peer(undefined, { 
@@ -376,15 +370,15 @@ window.joinRoom = function(code) {
             if (clientSpinner) clientSpinner.style.display = 'none';
             if (roomInputGroup) roomInputGroup.style.display = 'flex';
         });
-    } catch (err) {
-        console.error('Join room error:', err);
-        log('Failed to join room', 'error');
+    } catch (err) { 
+        console.error('Join room error:', err); 
+        log('Failed to join room', 'error'); 
     }
 };
 
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
 // SETUP CONNECTION
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
 function setupConnection(connection, code = null) {
     try {
         conn = connection;
@@ -409,11 +403,8 @@ function setupConnection(connection, code = null) {
         });
         
         conn.on('data', (data) => {
-            try {
-                handleIncomingData(data);
-            } catch (err) {
-                console.error('Data handling error:', err);
-            }
+            try { handleIncomingData(data); } 
+            catch (err) { console.error('Data handling error:', err); }
         });
         
         conn.on('close', () => { 
@@ -432,24 +423,19 @@ function setupConnection(connection, code = null) {
             isConnectionReady = false;
             log('Connection error', 'error');
         });
-    } catch (err) {
-        console.error('Setup connection error:', err);
+    } catch (err) { 
+        console.error('Setup connection error:', err); 
     }
 }
 
-// ═══════════════════════════════════════
-// FILE MODE TOGGLE
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
+// FILE MODE TOGGLE & INPUTS
+// ═══════════════════════════════════════════
 const btnFiles = $('btnFiles');
 const btnFolder = $('btnFolder');
 
-if (btnFiles) {
-    btnFiles.onclick = () => toggleMode(false);
-}
-
-if (btnFolder) {
-    btnFolder.onclick = () => toggleMode(true);
-}
+if (btnFiles) btnFiles.onclick = () => toggleMode(false);
+if (btnFolder) btnFolder.onclick = () => toggleMode(true);
 
 function toggleMode(isFolder) {
     if (btnFiles) btnFiles.classList.toggle('active', !isFolder);
@@ -458,61 +444,38 @@ function toggleMode(isFolder) {
     const dropLabel = $('dropLabel');
     const dropText = $('dropText');
     
-    if (dropLabel) {
-        dropLabel.setAttribute('for', isFolder ? 'folderInput' : 'fileInput');
-    }
-    
-    if (dropText) {
-        dropText.textContent = isFolder ? 'Select Folder' : 'Select Files';
-    }
+    if (dropLabel) dropLabel.setAttribute('for', isFolder ? 'folderInput' : 'fileInput');
+    if (dropText) dropText.textContent = isFolder ? 'Select Folder' : 'Select Files';
 }
 
-// ═══════════════════════════════════════
-// FILE INPUT HANDLERS
-// ═══════════════════════════════════════
-if (fileInput) {
-    fileInput.onchange = e => handleFiles(e.target.files);
-}
+if (fileInput) fileInput.onchange = e => handleFiles(e.target.files);
+if (folderInput) folderInput.onchange = e => handleFiles(e.target.files);
 
-if (folderInput) {
-    folderInput.onchange = e => handleFiles(e.target.files);
-}
-
-// Drop zone
 const dropZone = $('dropZone');
 if (dropZone) {
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.classList.add('drag-over');
-    });
-    
-    dropZone.addEventListener('dragleave', () => {
-        dropZone.classList.remove('drag-over');
-    });
-    
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('drag-over'); });
     dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
         dropZone.classList.remove('drag-over');
-        if (fileInput) {
-            fileInput.files = e.dataTransfer.files;
-            handleFiles(e.dataTransfer.files);
+        if (fileInput) { 
+            fileInput.files = e.dataTransfer.files; 
+            handleFiles(e.dataTransfer.files); 
         }
     });
 }
 
-// ═══════════════════════════════════════
-// SEND FILES
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
+// SEND FILES LOGIC
+// ═══════════════════════════════════════════
 async function handleFiles(files) {
-    if (!isConnectionReady) {
-        log('Not connected', 'error');
-        return;
+    if (!isConnectionReady) { 
+        log('Not connected', 'error'); 
+        return; 
     }
-    
     if (!files || files.length === 0) return;
     
     if (fileListEl) fileListEl.innerHTML = '';
-    
     log(`Sending ${files.length} file(s)...`, 'success');
     
     for (const file of files) {
@@ -531,22 +494,21 @@ async function handleFiles(files) {
             Storage.addHistory({ type: 'sent', name: file.name, size: file.size });
         } catch (err) {
             console.error('Send error:', err);
-            if (statusEl) {
-                statusEl.textContent = 'Failed ✗';
-                statusEl.style.color = 'var(--danger)';
+            if (statusEl) { 
+                statusEl.textContent = 'Failed ✗'; 
+                statusEl.style.color = 'var(--danger)'; 
             }
         }
     }
-    
     log('All files sent!', 'success');
 }
 
 function sendFile(file, statusEl) {
     return new Promise((resolve, reject) => {
         if (!conn || !conn.open) {
-            if (statusEl) {
-                statusEl.textContent = 'No connection ✗';
-                statusEl.style.color = 'var(--danger)';
+            if (statusEl) { 
+                statusEl.textContent = 'No connection ✗'; 
+                statusEl.style.color = 'var(--danger)'; 
             }
             return reject(new Error('Not connected'));
         }
@@ -556,39 +518,33 @@ function sendFile(file, statusEl) {
         let i = 0;
         
         try {
-            conn.send({ 
-                type: 'start', 
-                name: file.name, 
-                size: file.size, 
-                chunks: totalChunks 
-            });
-            
+            conn.send({ type: 'start', name: file.name, size: file.size, chunks: totalChunks });
             if (statusEl) statusEl.textContent = 'Sending...';
             
             const next = () => {
                 if (!conn || !conn.open) {
-                    if (statusEl) {
-                        statusEl.textContent = 'Disconnected ✗';
-                        statusEl.style.color = 'var(--danger)';
+                    if (statusEl) { 
+                        statusEl.textContent = 'Disconnected ✗'; 
+                        statusEl.style.color = 'var(--danger)'; 
                     }
                     return reject(new Error('Connection lost'));
                 }
                 
                 if (i >= totalChunks) { 
                     conn.send({ type: 'end', name: file.name }); 
-                    if (statusEl) {
+                    if (statusEl) { 
                         statusEl.textContent = 'Done ✓'; 
-                        statusEl.style.color = 'var(--success)';
+                        statusEl.style.color = 'var(--success)'; 
                     }
                     return resolve(); 
                 }
                 
-                // Flow control
+                // Flow control: pause if buffer gets too full
                 if (conn.bufferedAmount > 1024 * 1024) {
                     return setTimeout(next, 50);
                 }
                 
-                // Handle 0-byte files
+                // Handle 0-byte files gracefully
                 if (file.size === 0) {
                     i++;
                     return next();
@@ -601,11 +557,7 @@ function sendFile(file, statusEl) {
                 const reader = new FileReader();
                 reader.onload = e => {
                     try {
-                        conn.send({ 
-                            type: 'chunk', 
-                            i, 
-                            data: e.target.result 
-                        });
+                        conn.send({ type: 'chunk', i, data: e.target.result });
                         i++;
                         if (statusEl) {
                             statusEl.textContent = `${Math.round((i/totalChunks)*100)}%`;
@@ -613,9 +565,9 @@ function sendFile(file, statusEl) {
                         setTimeout(next, 5);
                     } catch (err) {
                         console.error('Send chunk error:', err);
-                        if (statusEl) {
-                            statusEl.textContent = 'Error ✗';
-                            statusEl.style.color = 'var(--danger)';
+                        if (statusEl) { 
+                            statusEl.textContent = 'Error ✗'; 
+                            statusEl.style.color = 'var(--danger)'; 
                         }
                         reject(err);
                     }
@@ -623,9 +575,9 @@ function sendFile(file, statusEl) {
                 
                 reader.onerror = () => {
                     console.error('File read error');
-                    if (statusEl) {
-                        statusEl.textContent = 'Read Error ✗';
-                        statusEl.style.color = 'var(--danger)';
+                    if (statusEl) { 
+                        statusEl.textContent = 'Read Error ✗'; 
+                        statusEl.style.color = 'var(--danger)'; 
                     }
                     reject(new Error('File read error'));
                 };
@@ -636,18 +588,18 @@ function sendFile(file, statusEl) {
             next();
         } catch (err) {
             console.error('Send file error:', err);
-            if (statusEl) {
-                statusEl.textContent = 'Error ✗';
-                statusEl.style.color = 'var(--danger)';
+            if (statusEl) { 
+                statusEl.textContent = 'Error ✗'; 
+                statusEl.style.color = 'var(--danger)'; 
             }
             reject(err);
         }
     });
 }
 
-// ═══════════════════════════════════════
-// RECEIVE FILES
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
+// RECEIVE FILES LOGIC
+// ═══════════════════════════════════════════
 let currentMeta = null;
 let chunks = [];
 let receivedCount = 0;
@@ -676,10 +628,9 @@ function handleIncomingData(data) {
             `;
             
             if (transferLog) transferLog.appendChild(item);
-            
             log(`Receiving: ${data.name}`, 'info');
-        } 
-        else if (data.type === 'chunk') {
+            
+        } else if (data.type === 'chunk') {
             chunks[data.i] = data.data;
             receivedCount += data.data.byteLength;
             
@@ -692,8 +643,8 @@ function handleIncomingData(data) {
                 if (fill) fill.style.width = `${pct}%`;
                 if (text) text.textContent = `${pct}%`;
             }
-        } 
-        else if (data.type === 'end') {
+            
+        } else if (data.type === 'end') {
             const blob = new Blob(chunks.filter(c => c !== undefined));
             receivedFiles.push({ name: currentMeta.name, blob });
             
@@ -712,23 +663,22 @@ function handleIncomingData(data) {
             }
             
             if (downloadAllBtn) downloadAllBtn.style.display = 'block';
-            
             log(`Received: ${currentMeta.name}`, 'success');
             
-            // Reset
+            // Reset for next file
             currentMeta = null;
             chunks = [];
             receivedCount = 0;
         }
-    } catch (err) {
-        console.error('Handle incoming data error:', err);
-        log('Error receiving data', 'error');
+    } catch (err) { 
+        console.error('Handle incoming data error:', err); 
+        log('Error receiving data', 'error'); 
     }
 }
 
-// ═══════════════════════════════════════
-// DOWNLOAD ALL
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
+// DOWNLOAD ALL LOGIC
+// ═══════════════════════════════════════════
 if (downloadAllBtn) {
     downloadAllBtn.onclick = async () => {
         if (receivedFiles.length === 0) {
@@ -771,21 +721,18 @@ if (downloadAllBtn) {
     };
 }
 
-// ═══════════════════════════════════════
-// BUTTON HANDLERS
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
+// UI BUTTON HANDLERS
+// ═══════════════════════════════════════════
 if (copyCodeBtn) {
     copyCodeBtn.onclick = async () => {
         if (!currentRoomCode) return;
-        
         try {
             await navigator.clipboard.writeText(currentRoomCode);
             copyCodeBtn.textContent = '✅ Copied';
-            setTimeout(() => {
-                copyCodeBtn.textContent = '📋 Copy';
-            }, 2000);
+            setTimeout(() => { copyCodeBtn.textContent = '📋 Copy'; }, 2000);
         } catch {
-            // Fallback
+            // Fallback for older browsers
             const textarea = document.createElement('textarea');
             textarea.value = currentRoomCode;
             document.body.appendChild(textarea);
@@ -793,9 +740,7 @@ if (copyCodeBtn) {
             document.execCommand('copy');
             document.body.removeChild(textarea);
             copyCodeBtn.textContent = '✅ Copied';
-            setTimeout(() => {
-                copyCodeBtn.textContent = '📋 Copy';
-            }, 2000);
+            setTimeout(() => { copyCodeBtn.textContent = '📋 Copy'; }, 2000);
         }
     };
 }
@@ -803,7 +748,6 @@ if (copyCodeBtn) {
 if (shareCodeBtn) {
     shareCodeBtn.onclick = () => {
         if (!currentRoomCode) return;
-        
         const shareData = {
             title: 'QR P2P Transfer',
             text: `Join my transfer room: ${currentRoomCode}`,
@@ -811,9 +755,7 @@ if (shareCodeBtn) {
         };
         
         if (navigator.share) {
-            navigator.share(shareData).catch(() => {
-                // User cancelled
-            });
+            navigator.share(shareData).catch(() => {}); // User cancelled
         } else {
             // Fallback to copy
             if (copyCodeBtn) copyCodeBtn.click();
@@ -832,13 +774,12 @@ if (clearHistoryBtn) {
 if (joinRoomBtn) {
     joinRoomBtn.onclick = () => {
         if (roomCodeInput) {
-            const code = roomCodeInput.value.trim();
-            window.joinRoom(code);
+            window.joinRoom(roomCodeInput.value.trim());
         }
     };
 }
 
-// Auto-uppercase room code input
+// Auto-uppercase and filter room code input
 if (roomCodeInput) {
     roomCodeInput.addEventListener('input', (e) => {
         e.target.value = e.target.value.toUpperCase().replace(/[^A-HJKMNP-Z2-9]/g, '');
@@ -846,15 +787,14 @@ if (roomCodeInput) {
     
     roomCodeInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
-            const code = roomCodeInput.value.trim();
-            window.joinRoom(code);
+            window.joinRoom(roomCodeInput.value.trim());
         }
     });
 }
 
-// ══════════════════════════════════════
+// ═══════════════════════════════════════════
 // BOOT
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
 } else {

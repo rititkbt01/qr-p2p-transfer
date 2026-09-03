@@ -9,7 +9,6 @@
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📤</text></svg>">
     
-    <!-- Preload critical resources -->
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
     <link rel="preconnect" href="https://unpkg.com">
     
@@ -25,21 +24,24 @@
         </header>
 
         <main>
-            <!-- TABS -->
             <nav class="tabs" role="tablist">
                 <button class="tab-btn active" data-tab="transfer" role="tab" aria-selected="true">Transfer</button>
                 <button class="tab-btn" data-tab="saved" role="tab" aria-selected="false">Saved</button>
                 <button class="tab-btn" data-tab="history" role="tab" aria-selected="false">History</button>
             </nav>
 
-            <!-- TAB 1: TRANSFER -->
             <div id="tab-transfer" class="tab-content active" role="tabpanel">
                 
-                <!-- Connection Card -->
                 <section class="card" id="connectionCard">
                     <h2>1. Connect</h2>
                     
-                    <!-- Host View (Show QR Code) -->
+                    <!-- MODE TOGGLE -->
+                    <div class="mode-toggle connection-mode-toggle">
+                        <button class="toggle-btn active" id="hostModeBtn" type="button">📤 Create Room</button>
+                        <button class="toggle-btn" id="clientModeBtn" type="button">📥 Join Room</button>
+                    </div>
+                    
+                    <!-- Host View -->
                     <div id="hostView">
                         <div class="room-code-section">
                             <p class="room-label">Your Room Code</p>
@@ -56,7 +58,7 @@
                         <p id="hostStatus" class="hint">Waiting for connection...</p>
                     </div>
                     
-                    <!-- Client View (Enter Code) -->
+                    <!-- Client View -->
                     <div id="clientView" style="display: none;">
                         <div class="client-connect">
                             <p class="center-text" id="connectionStatus">Enter room code to connect</p>
@@ -70,7 +72,6 @@
                     </div>
                 </section>
 
-                <!-- Send Card -->
                 <section class="card" id="sendCard" style="display: none;">
                     <h2>2. Send Files</h2>
                     <div class="mode-toggle">
@@ -88,7 +89,6 @@
                     <div id="fileList" class="file-list"></div>
                 </section>
 
-                <!-- Receive Card -->
                 <section class="card" id="receiveCard" style="display: none;">
                     <div class="card-header-row">
                         <h2>3. Receiving</h2>
@@ -98,7 +98,6 @@
                 </section>
             </div>
 
-            <!-- TAB 2: SAVED -->
             <div id="tab-saved" class="tab-content" role="tabpanel">
                 <section class="card">
                     <h2>💾 Saved Devices</h2>
@@ -107,12 +106,11 @@
                 </section>
             </div>
 
-            <!-- TAB 3: HISTORY -->
             <div id="tab-history" class="tab-content" role="tabpanel">
                 <section class="card">
                     <div class="card-header-row">
-                        <h2> Transfer History</h2>
-                        <button id="clearHistoryBtn" class="btn-action">️ Clear</button>
+                        <h2>🕒 Transfer History</h2>
+                        <button id="clearHistoryBtn" class="btn-action">🗑️ Clear</button>
                     </div>
                     <div id="historyList" class="history-list"></div>
                 </section>
@@ -123,7 +121,6 @@
 
     <script src="/js/app.js" defer></script>
     <script>
-        // Register Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed'));
