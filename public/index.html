@@ -33,11 +33,11 @@
                 </div>
             </section>
 
-            <!-- 2. SEND FILES CARD (Hidden until connected) -->
+            <!-- 2. SEND FILES/FOLDER CARD (Hidden until connected) -->
             <section class="card" id="sendCard" style="display: none;">
                 <h2>2. Send Files or Folder</h2>
                 
-                <!-- NEW: Mode Toggle Buttons -->
+                <!-- Mode Toggle Buttons -->
                 <div class="mode-toggle">
                     <button class="toggle-btn active" id="btnFiles" type="button">📄 Files</button>
                     <button class="toggle-btn" id="btnFolder" type="button">📁 Folder</button>
@@ -46,7 +46,7 @@
                 <div class="drop-zone" id="dropZone">
                     <!-- Standard File Input -->
                     <input type="file" id="fileInput" multiple hidden>
-                    <!-- NEW: Folder Input (webkitdirectory allows folder selection) -->
+                    <!-- Folder Input (webkitdirectory allows folder selection) -->
                     <input type="file" id="folderInput" webkitdirectory hidden>
                     
                     <label for="fileInput" class="drop-label" id="dropLabel">
@@ -67,7 +67,7 @@
             <section class="card">
                 <h2>Status</h2>
                 <div id="statusLog" class="status-log">
-                    <p> Initializing...</p>
+                    <p>⏳ Initializing...</p>
                 </div>
             </section>
         </main>

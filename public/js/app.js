@@ -162,7 +162,6 @@ btnFolder.addEventListener('click', () => setMode(true));
 function setMode(isFolder) {
     isFolderMode = isFolder;
     
-    // Update Button Styles
     if (isFolder) {
         btnFolder.classList.add('active');
         btnFiles.classList.remove('active');
@@ -215,7 +214,7 @@ async function handleFiles(files) {
 
     const fileItems = [];
     for (const file of files) {
-        // Skip empty directories (size 0 and ends with /)
+        // Skip empty directory placeholders created by webkitdirectory
         if (file.size === 0 && file.name.endsWith('/')) continue;
 
         const item = document.createElement('div');
@@ -356,7 +355,7 @@ function handleIncomingData(data) {
             const validChunks = receivedChunks.filter(c => c !== undefined);
             const fileBlob = new Blob(validChunks);
             
-            log(` Blob created: ${formatSize(fileBlob.size)} bytes`, 'success');
+            log(`💾 Blob created: ${formatSize(fileBlob.size)} bytes`, 'success');
             
             const actionsDiv = document.createElement('div');
             actionsDiv.style.display = 'flex'; 
