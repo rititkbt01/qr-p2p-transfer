@@ -120,3 +120,13 @@ header p { color: var(--text-dim); font-size: 0.95rem; }
     body { background: white; color: black; }
     .card { break-inside: avoid; box-shadow: none; border: 1px solid #ddd; }
 }
+
+/* Add this for the disconnect button */
+#disconnectBtn {
+    background: var(--danger) !important;
+}
+
+#disconnectBtn:hover {
+    background: #dc2626 !important;
+    transform: translateY(-2px);
+}

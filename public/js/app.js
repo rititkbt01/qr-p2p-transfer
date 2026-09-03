@@ -1,4 +1,4 @@
-// app.js - ROBUST PRODUCTION VERSION WITH AUTO-RECOVERY
+// app.js - COMPLETE WITH DISCONNECT & MODE SWITCHING
 
 const $ = id => {
     const el = document.getElementById(id);
@@ -23,6 +23,7 @@ const folderInput = $('folderInput');
 const fileListEl = $('fileList');
 const transferLog = $('transferLog');
 const downloadAllBtn = $('downloadAllBtn');
+const disconnectBtn = $('disconnectBtn');
 const savedDevicesList = $('savedDevicesList');
 const noDevicesHint = $('noDevicesHint');
 const historyList = $('historyList');
@@ -74,11 +75,34 @@ function setClientMode() {
     if (clientView) clientView.style.display = 'block';
     if (hostView) hostView.style.display = 'none';
     isHost = false;
-    if (peer) { peer.destroy(); peer = null; }
+}
+
+function disconnect() {
+    if (conn) {
+        conn.close();
+        conn = null;
+    }
+    if (peer) {
+        peer.destroy();
+        peer = null;
+    }
+    isConnectionReady = false;
+    currentRoomCode = null;
+    receivedFiles = [];
+    
+    if (sendCard) sendCard.style.display = 'none';
+    if (receiveCard) receiveCard.style.display = 'none';
+    if (transferLog) transferLog.innerHTML = '';
+    if (downloadAllBtn) downloadAllBtn.style.display = 'none';
+    
+    // Reset to host mode
+    setHostMode();
+    log('Disconnected. You can now create or join a new room.', 'info');
 }
 
 if (hostModeBtn) hostModeBtn.onclick = setHostMode;
 if (clientModeBtn) clientModeBtn.onclick = setClientMode;
+if (disconnectBtn) disconnectBtn.onclick = disconnect;
 
 // ═══════════════════════════════════════════
 // UTILITIES & HEALTH CHECK
@@ -107,12 +131,11 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// CRITICAL: Check if connection is truly alive before any action
 function checkConnection() {
     if (!conn || !conn.open) {
         isConnectionReady = false;
         if (sendCard) sendCard.style.display = 'none';
-        log('⚠️ Connection lost. Please refresh or rejoin.', 'error');
+        log('⚠️ Connection lost. Please disconnect and rejoin.', 'error');
         return false;
     }
     return true;
@@ -304,16 +327,16 @@ function setupConnection(connection, code = null) {
         conn.on('close', () => { 
             isConnectionReady = false; 
             if (sendCard) sendCard.style.display = 'none';
-            log('⚠️ Disconnected. Please refresh or rejoin.', 'error');
+            log('⚠️ Disconnected.', 'error');
             if (!isHost && connectionStatus) {
-                connectionStatus.textContent = 'Disconnected. Please refresh.';
+                connectionStatus.textContent = 'Disconnected. Click Disconnect to rejoin.';
                 connectionStatus.style.color = 'var(--danger)';
             }
         });
         conn.on('error', (err) => {
             console.error('Connection error:', err);
             isConnectionReady = false;
-            log('⚠️ Connection error. Please refresh.', 'error');
+            log('⚠️ Connection error.', 'error');
         });
     } catch (err) { console.error('Setup connection error:', err); }
 }
@@ -350,9 +373,7 @@ if (dropZone) {
 }
 
 async function handleFiles(files) {
-    // CRITICAL: Verify connection is actually alive before attempting to send
     if (!checkConnection()) return;
-    
     if (!files || files.length === 0) return;
     if (fileListEl) fileListEl.innerHTML = '';
     log(`Sending ${files.length} file(s)...`, 'success');
@@ -366,7 +387,6 @@ async function handleFiles(files) {
         const statusEl = item.querySelector('.status');
         
         try {
-            // Double-check connection inside the loop in case it drops mid-transfer
             if (!checkConnection()) {
                 statusEl.textContent = 'Disconnected ✗';
                 statusEl.style.color = 'var(--danger)';
@@ -439,7 +459,7 @@ function sendFile(file, statusEl) {
 }
 
 // ═══════════════════════════════════════════
-// RECEIVING LOGIC (WITH INTERRUPTION RECOVERY)
+// RECEIVING LOGIC
 // ═══════════════════════════════════════════
 let currentMeta = null;
 let chunks = [];
@@ -448,9 +468,8 @@ let receivedCount = 0;
 function handleIncomingData(data) {
     try {
         if (data.type === 'start') {
-            // SAFEGUARD: If a previous transfer was interrupted, reset state cleanly
             if (currentMeta) {
-                console.warn('Previous transfer interrupted, resetting state for new file.');
+                console.warn('Previous transfer interrupted, resetting state.');
             }
             currentMeta = data;
             chunks = new Array(data.chunks);
@@ -466,7 +485,7 @@ function handleIncomingData(data) {
             log(`Receiving: ${data.name}`, 'info');
             
         } else if (data.type === 'chunk') {
-            if (!currentMeta) return; // Ignore stray chunks
+            if (!currentMeta) return;
             chunks[data.i] = data.data;
             receivedCount += data.data.byteLength;
             const pct = Math.round((receivedCount / currentMeta.size) * 100);
@@ -495,7 +514,6 @@ function handleIncomingData(data) {
             if (downloadAllBtn) downloadAllBtn.style.display = 'block';
             log(`Received: ${currentMeta.name}`, 'success');
             
-            // Clean reset for the next file
             currentMeta = null;
             chunks = [];
             receivedCount = 0;

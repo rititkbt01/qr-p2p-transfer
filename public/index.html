@@ -47,7 +47,7 @@
                             <p class="room-label">Your Room Code</p>
                             <div class="room-code-display" id="roomCodeDisplay">------</div>
                             <div class="room-actions">
-                                <button id="copyCodeBtn" class="btn-action" title="Copy code">📋 Copy</button>
+                                <button id="copyCodeBtn" class="btn-action" title="Copy code"> Copy</button>
                                 <button id="shareCodeBtn" class="btn-action" title="Share link">🔗 Share</button>
                             </div>
                         </div>
@@ -73,7 +73,10 @@
                 </section>
 
                 <section class="card" id="sendCard" style="display: none;">
-                    <h2>2. Send Files</h2>
+                    <div class="card-header-row">
+                        <h2>2. Send Files</h2>
+                        <button id="disconnectBtn" class="btn-action" style="background: var(--danger);">🚪 Disconnect</button>
+                    </div>
                     <div class="mode-toggle">
                         <button class="toggle-btn active" id="btnFiles" type="button">📄 Files</button>
                         <button class="toggle-btn" id="btnFolder" type="button">📁 Folder</button>
@@ -100,7 +103,7 @@
 
             <div id="tab-saved" class="tab-content" role="tabpanel">
                 <section class="card">
-                    <h2>💾 Saved Devices</h2>
+                    <h2> Saved Devices</h2>
                     <p class="hint" id="noDevicesHint">No saved devices yet. Connect to save.</p>
                     <div id="savedDevicesList" class="saved-devices-list"></div>
                 </section>
@@ -109,8 +112,8 @@
             <div id="tab-history" class="tab-content" role="tabpanel">
                 <section class="card">
                     <div class="card-header-row">
-                        <h2>🕒 Transfer History</h2>
-                        <button id="clearHistoryBtn" class="btn-action">🗑️ Clear</button>
+                        <h2> Transfer History</h2>
+                        <button id="clearHistoryBtn" class="btn-action">️ Clear</button>
                     </div>
                     <div id="historyList" class="history-list"></div>
                 </section>
