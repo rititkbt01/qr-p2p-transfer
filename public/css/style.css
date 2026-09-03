@@ -251,3 +251,91 @@
         margin-top: 4px;
     }
 }
+/* ═══════════════════════════════════════════
+   TABS NAVIGATION
+   ═══════════════════════════════════════════ */
+.tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    background: rgba(0,0,0,0.2);
+    padding: 4px;
+    border-radius: 12px;
+}
+.tab-btn {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-dim);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.tab-btn.active {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 2px 8px var(--accent-glow);
+}
+.tab-content { display: none; }
+.tab-content.active { display: block; animation: fadeIn 0.3s ease; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ═══════════════════════════════════════════
+   HISTORY & SAVED DEVICES
+   ═══════════════════════════════════════════ */
+.card-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+.card-header-row h2 { margin-bottom: 0; }
+
+.history-list, .saved-devices-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.history-item, .saved-device-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+}
+.history-icon { font-size: 1.5rem; }
+.history-details { flex: 1; }
+.history-name { font-weight: 600; font-size: 0.9rem; margin-bottom: 2px; }
+.history-meta { font-size: 0.75rem; color: var(--text-dim); }
+
+.connect-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+.delete-btn { background: none; border: none; cursor: pointer; font-size: 1rem; opacity: 0.6; }
+.delete-btn:hover { opacity: 1; }
+
+/* ═══════════════════════════════════════════
+   DOWNLOAD ALL BUTTON
+   ═══════════════════════════════════════════ */
+#downloadAllBtn {
+    background: var(--success);
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    font-weight: 600;
+}
+#downloadAllBtn:hover { background: #059669; }
