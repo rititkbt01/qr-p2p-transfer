@@ -4,12 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>QR P2P Transfer</title>
+    <meta name="description" content="Fast, secure, peer-to-peer file transfer">
     <meta name="theme-color" content="#0f172a">
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📤</text></svg>">
+    
+    <!-- Preload critical resources -->
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <link rel="preconnect" href="https://unpkg.com">
+    
     <link rel="stylesheet" href="/css/style.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js" defer></script>
 </head>
 <body>
     <div class="container">
@@ -20,42 +26,46 @@
 
         <main>
             <!-- TABS -->
-            <nav class="tabs">
-                <button class="tab-btn active" data-tab="transfer">Transfer</button>
-                <button class="tab-btn" data-tab="saved">Saved</button>
-                <button class="tab-btn" data-tab="history">History</button>
+            <nav class="tabs" role="tablist">
+                <button class="tab-btn active" data-tab="transfer" role="tab" aria-selected="true">Transfer</button>
+                <button class="tab-btn" data-tab="saved" role="tab" aria-selected="false">Saved</button>
+                <button class="tab-btn" data-tab="history" role="tab" aria-selected="false">History</button>
             </nav>
 
             <!-- TAB 1: TRANSFER -->
-            <div id="tab-transfer" class="tab-content active">
+            <div id="tab-transfer" class="tab-content active" role="tabpanel">
                 
                 <!-- Connection Card -->
                 <section class="card" id="connectionCard">
                     <h2>1. Connect</h2>
                     
-                    <div id="hostView" style="display: none;">
+                    <!-- Host View (Show QR Code) -->
+                    <div id="hostView">
                         <div class="room-code-section">
                             <p class="room-label">Your Room Code</p>
                             <div class="room-code-display" id="roomCodeDisplay">------</div>
                             <div class="room-actions">
-                                <button id="copyCodeBtn" class="btn-action">📋 Copy</button>
-                                <button id="shareCodeBtn" class="btn-action">🔗 Share</button>
+                                <button id="copyCodeBtn" class="btn-action" title="Copy code">📋 Copy</button>
+                                <button id="shareCodeBtn" class="btn-action" title="Share link">🔗 Share</button>
                             </div>
                         </div>
                         <p class="instruction">Share code or scan QR</p>
-                        <div class="qr-wrapper" id="qrWrapper" style="display:none;">
+                        <div class="qr-wrapper" id="qrWrapper">
                             <div id="qrcode"></div>
                         </div>
+                        <p id="hostStatus" class="hint">Waiting for connection...</p>
                     </div>
                     
+                    <!-- Client View (Enter Code) -->
                     <div id="clientView" style="display: none;">
                         <div class="client-connect">
                             <p class="center-text" id="connectionStatus">Enter room code to connect</p>
                             <div class="room-input-group" id="roomInputGroup">
-                                <input type="text" id="roomCodeInput" placeholder="6-DIGIT CODE" maxlength="6" class="room-input" autocomplete="off">
+                                <input type="text" id="roomCodeInput" placeholder="6-DIGIT CODE" maxlength="6" class="room-input" autocomplete="off" autocapitalize="characters">
                                 <button id="joinRoomBtn" class="btn-primary">Join</button>
                             </div>
                             <div class="spinner" id="clientSpinner" style="display:none;"></div>
+                            <p class="hint">Or scan the QR code on sender's device</p>
                         </div>
                     </div>
                 </section>
@@ -64,8 +74,8 @@
                 <section class="card" id="sendCard" style="display: none;">
                     <h2>2. Send Files</h2>
                     <div class="mode-toggle">
-                        <button class="toggle-btn active" id="btnFiles">📄 Files</button>
-                        <button class="toggle-btn" id="btnFolder">📁 Folder</button>
+                        <button class="toggle-btn active" id="btnFiles" type="button">📄 Files</button>
+                        <button class="toggle-btn" id="btnFolder" type="button">📁 Folder</button>
                     </div>
                     <div class="drop-zone" id="dropZone">
                         <input type="file" id="fileInput" multiple hidden>
@@ -89,20 +99,20 @@
             </div>
 
             <!-- TAB 2: SAVED -->
-            <div id="tab-saved" class="tab-content">
+            <div id="tab-saved" class="tab-content" role="tabpanel">
                 <section class="card">
                     <h2>💾 Saved Devices</h2>
-                    <p class="hint" id="noDevicesHint">No saved devices yet.</p>
+                    <p class="hint" id="noDevicesHint">No saved devices yet. Connect to save.</p>
                     <div id="savedDevicesList" class="saved-devices-list"></div>
                 </section>
             </div>
 
             <!-- TAB 3: HISTORY -->
-            <div id="tab-history" class="tab-content">
+            <div id="tab-history" class="tab-content" role="tabpanel">
                 <section class="card">
                     <div class="card-header-row">
-                        <h2>🕒 Transfer History</h2>
-                        <button id="clearHistoryBtn" class="btn-action">🗑️ Clear</button>
+                        <h2> Transfer History</h2>
+                        <button id="clearHistoryBtn" class="btn-action">️ Clear</button>
                     </div>
                     <div id="historyList" class="history-list"></div>
                 </section>
@@ -111,10 +121,13 @@
         </main>
     </div>
 
-    <script src="/js/app.js"></script>
+    <script src="/js/app.js" defer></script>
     <script>
+        // Register Service Worker
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW failed', err));
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed'));
+            });
         }
     </script>
 </body>

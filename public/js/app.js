@@ -1,40 +1,83 @@
-// app.js - COMPLETE PRODUCTION VERSION
+// app.js - PRODUCTION READY WITH ERROR HANDLING
 
-const $ = id => document.getElementById(id);
-const hostView = $('hostView'), clientView = $('clientView');
-const roomCodeDisplay = $('roomCodeDisplay'), roomCodeInput = $('roomCodeInput');
-const joinRoomBtn = $('joinRoomBtn'), copyCodeBtn = $('copyCodeBtn'), shareCodeBtn = $('shareCodeBtn');
-const clientSpinner = $('clientSpinner'), roomInputGroup = $('roomInputGroup');
+// ═══════════════════════════════════════
+// DOM REFERENCES
+// ═══════════════════════════════════════
+const $ = id => {
+    const el = document.getElementById(id);
+    if (!el) console.error(`Element #${id} not found!`);
+    return el;
+};
+
+const hostView = $('hostView');
+const clientView = $('clientView');
+const roomCodeDisplay = $('roomCodeDisplay');
+const roomCodeInput = $('roomCodeInput');
+const joinRoomBtn = $('joinRoomBtn');
+const copyCodeBtn = $('copyCodeBtn');
+const shareCodeBtn = $('shareCodeBtn');
+const clientSpinner = $('clientSpinner');
+const roomInputGroup = $('roomInputGroup');
 const connectionStatus = $('connectionStatus');
-const sendCard = $('sendCard'), receiveCard = $('receiveCard');
-const fileInput = $('fileInput'), folderInput = $('folderInput');
-const fileListEl = $('fileList'), transferLog = $('transferLog');
+const sendCard = $('sendCard');
+const receiveCard = $('receiveCard');
+const fileInput = $('fileInput');
+const folderInput = $('folderInput');
+const fileListEl = $('fileList');
+const transferLog = $('transferLog');
 const downloadAllBtn = $('downloadAllBtn');
-const savedDevicesList = $('savedDevicesList'), noDevicesHint = $('noDevicesHint');
-const historyList = $('historyList'), clearHistoryBtn = $('clearHistoryBtn');
+const savedDevicesList = $('savedDevicesList');
+const noDevicesHint = $('noDevicesHint');
+const historyList = $('historyList');
+const clearHistoryBtn = $('clearHistoryBtn');
+const qrWrapper = $('qrWrapper');
+const qrcodeDiv = $('qrcode');
+const hostStatus = $('hostStatus');
 
-let peer = null, conn = null;
-let isConnectionReady = false, isHost = false, currentRoomCode = null;
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+let peer = null;
+let conn = null;
+let isConnectionReady = false;
+let isHost = false;
+let currentRoomCode = null;
 let receivedFiles = [];
 const PEER_PREFIX = 'qrlan-';
-const ROOM_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const ROOM_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // No 0/O, 1/I/L
 
-// Tabs
+// ═══════════════════════════════════════
+// TABS LOGIC
+// ══════════════════════════════════════
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => {
+            b.classList.remove('active');
+            b.setAttribute('aria-selected', 'false');
+        });
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        
         btn.classList.add('active');
-        $(`tab-${btn.dataset.tab}`).classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
+        const tabId = `tab-${btn.dataset.tab}`;
+        const tabContent = document.getElementById(tabId);
+        if (tabContent) tabContent.classList.add('active');
     });
 });
 
+// ═══════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════
 function log(msg, type = 'info') {
     console.log(`[${type.toUpperCase()}] ${msg}`);
+    // Also show in UI if status element exists
+    if (hostStatus && isHost) {
+        hostStatus.textContent = msg;
+    }
 }
 
 function formatSize(bytes) {
-    if (!bytes) return '0 B';
+    if (!bytes || bytes === 0) return '0 B';
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
@@ -42,256 +85,778 @@ function formatSize(bytes) {
 
 function generateRoomCode() {
     let code = '';
-    for (let i = 0; i < 6; i++) code += ROOM_CHARS.charAt(Math.floor(Math.random() * ROOM_CHARS.length));
+    for (let i = 0; i < 6; i++) {
+        code += ROOM_CHARS.charAt(Math.floor(Math.random() * ROOM_CHARS.length));
+    }
     return code;
 }
 
-// LocalStorage
+// ═══════════════════════════════════════
+// LOCALSTORAGE
+// ═══════════════════════════════════════
 const Storage = {
-    getDevices: () => JSON.parse(localStorage.getItem('p2p_devices') || '[]'),
+    getDevices: () => {
+        try {
+            return JSON.parse(localStorage.getItem('p2p_devices') || '[]');
+        } catch {
+            return [];
+        }
+    },
     saveDevice: (device) => {
-        let devices = Storage.getDevices();
-        const idx = devices.findIndex(d => d.code === device.code);
-        if (idx >= 0) devices[idx] = { ...devices[idx], ...device, lastSeen: Date.now() };
-        else devices.push({ ...device, lastSeen: Date.now(), count: 1 });
-        localStorage.setItem('p2p_devices', JSON.stringify(devices));
-        renderSavedDevices();
+        try {
+            let devices = Storage.getDevices();
+            const idx = devices.findIndex(d => d.code === device.code);
+            if (idx >= 0) {
+                devices[idx] = { ...devices[idx], ...device, lastSeen: Date.now() };
+            } else {
+                devices.push({ ...device, lastSeen: Date.now(), count: 1 });
+            }
+            localStorage.setItem('p2p_devices', JSON.stringify(devices));
+            renderSavedDevices();
+        } catch (err) {
+            console.error('Failed to save device:', err);
+        }
     },
     removeDevice: (code) => {
-        localStorage.setItem('p2p_devices', JSON.stringify(Storage.getDevices().filter(d => d.code !== code)));
-        renderSavedDevices();
+        try {
+            const devices = Storage.getDevices().filter(d => d.code !== code);
+            localStorage.setItem('p2p_devices', JSON.stringify(devices));
+            renderSavedDevices();
+        } catch (err) {
+            console.error('Failed to remove device:', err);
+        }
     },
-    getHistory: () => JSON.parse(localStorage.getItem('p2p_history') || '[]'),
+    getHistory: () => {
+        try {
+            return JSON.parse(localStorage.getItem('p2p_history') || '[]');
+        } catch {
+            return [];
+        }
+    },
     addHistory: (item) => {
-        const history = Storage.getHistory();
-        history.unshift({ ...item, date: Date.now() });
-        localStorage.setItem('p2p_history', JSON.stringify(history.slice(0, 50)));
-        renderHistory();
+        try {
+            const history = Storage.getHistory();
+            history.unshift({ ...item, date: Date.now() });
+            localStorage.setItem('p2p_history', JSON.stringify(history.slice(0, 50)));
+            renderHistory();
+        } catch (err) {
+            console.error('Failed to add history:', err);
+        }
     },
-    clearHistory: () => { localStorage.removeItem('p2p_history'); renderHistory(); }
+    clearHistory: () => {
+        try {
+            localStorage.removeItem('p2p_history');
+            renderHistory();
+        } catch (err) {
+            console.error('Failed to clear history:', err);
+        }
+    }
 };
 
 function renderSavedDevices() {
+    if (!savedDevicesList || !noDevicesHint) return;
+    
     const devices = Storage.getDevices();
-    if (devices.length === 0) { noDevicesHint.style.display = 'block'; savedDevicesList.innerHTML = ''; return; }
+    if (devices.length === 0) { 
+        noDevicesHint.style.display = 'block'; 
+        savedDevicesList.innerHTML = ''; 
+        return; 
+    }
+    
     noDevicesHint.style.display = 'none';
     savedDevicesList.innerHTML = devices.map(d => `
         <div class="saved-device-item">
-            <div class="device-info" style="flex:1">
-                <div class="history-name">${d.name || 'Unknown Device'}</div>
-                <div class="history-meta">${d.code} • ${d.count || 1}x</div>
+            <div class="device-info">
+                <div class="device-name">${escapeHtml(d.name || 'Unknown Device')}</div>
+                <div class="device-code">${escapeHtml(d.code)} • ${d.count || 1}x</div>
             </div>
-            <button class="connect-btn" onclick="joinRoom('${d.code}')">Connect</button>
-            <button class="delete-btn" onclick="Storage.removeDevice('${d.code}')">🗑️</button>
+            <button class="connect-btn" onclick="window.joinRoom('${escapeHtml(d.code)}')">Connect</button>
+            <button class="delete-btn" onclick="Storage.removeDevice('${escapeHtml(d.code)}')" title="Remove">🗑️</button>
         </div>
     `).join('');
 }
 
 function renderHistory() {
+    if (!historyList) return;
+    
     const history = Storage.getHistory();
-    if (history.length === 0) { historyList.innerHTML = '<p class="hint">No history yet.</p>'; return; }
+    if (history.length === 0) { 
+        historyList.innerHTML = '<p class="hint">No history yet.</p>'; 
+        return; 
+    }
+    
     historyList.innerHTML = history.map(h => `
         <div class="history-item">
             <span class="history-icon">${h.type === 'sent' ? '📤' : '📥'}</span>
             <div class="history-details">
-                <div class="history-name">${h.name}</div>
-                <div class="history-meta">${formatSize(h.size)} • ${new Date(h.date).toLocaleTimeString()}</div>
+                <div class="history-name">${escapeHtml(h.name)}</div>
+                <div class="history-meta">${formatSize(h.size)} • ${new Date(h.date).toLocaleString()}</div>
             </div>
         </div>
     `).join('');
 }
 
-// Init
-function init() {
-    const params = new URLSearchParams(window.location.search);
-    const urlRoom = params.get('room');
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
-    if (urlRoom) {
-        clientView.style.display = 'block';
-        hostView.style.display = 'none';
-        roomInputGroup.style.display = 'none';
-        clientSpinner.style.display = 'block';
-        connectionStatus.textContent = `Joining ${urlRoom}...`;
-        setTimeout(() => joinRoom(urlRoom), 500);
-    } else {
-        hostView.style.display = 'block';
-        clientView.style.display = 'none';
-        isHost = true;
-        startHost();
+// ═══════════════════════════════════════
+// INITIALIZATION
+// ═══════════════════════════════════════
+function init() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const urlRoom = params.get('room');
+
+        if (urlRoom) {
+            // CLIENT MODE
+            if (clientView) clientView.style.display = 'block';
+            if (hostView) hostView.style.display = 'none';
+            if (roomInputGroup) roomInputGroup.style.display = 'none';
+            if (clientSpinner) clientSpinner.style.display = 'block';
+            if (connectionStatus) connectionStatus.textContent = `Joining ${urlRoom}...`;
+            
+            setTimeout(() => joinRoom(urlRoom), 500);
+        } else {
+            // HOST MODE
+            if (hostView) hostView.style.display = 'block';
+            if (clientView) clientView.style.display = 'none';
+            isHost = true;
+            startHost();
+        }
+        
+        renderSavedDevices();
+        renderHistory();
+    } catch (err) {
+        console.error('Initialization error:', err);
+        log('Failed to initialize', 'error');
     }
-    renderSavedDevices();
-    renderHistory();
 }
 
 function startHost() {
-    currentRoomCode = generateRoomCode();
-    roomCodeDisplay.textContent = currentRoomCode;
-    createPeer(`${PEER_PREFIX}${currentRoomCode}`);
+    try {
+        currentRoomCode = generateRoomCode();
+        if (roomCodeDisplay) roomCodeDisplay.textContent = currentRoomCode;
+        
+        const peerId = `${PEER_PREFIX}${currentRoomCode}`;
+        log(`Generated room: ${currentRoomCode}`);
+        createPeer(peerId);
+    } catch (err) {
+        console.error('Start host error:', err);
+        log('Failed to start host', 'error');
+    }
 }
 
 function createPeer(peerId) {
-    peer = new Peer(peerId, { config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } });
-    
-    peer.on('open', () => {
-        log(`Ready: ${peerId}`);
-        if (isHost) {
-            $('qrWrapper').style.display = 'flex';
-            // Clear previous QR if any
-            $('qrcode').innerHTML = '';
-            new QRCode($('qrcode'), { 
-                text: `${window.location.origin}/?room=${currentRoomCode}`, 
-                width: 180, height: 180,
-                colorDark: '#1a202c', colorLight: '#ffffff'
-            });
+    try {
+        if (!window.Peer) {
+            console.error('PeerJS library not loaded!');
+            log('Error: PeerJS not loaded', 'error');
+            return;
         }
-    });
+        
+        peer = new Peer(peerId, { 
+            debug: 1,
+            config: { 
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ] 
+            } 
+        });
+        
+        peer.on('open', (id) => {
+            log(`Ready: ${id}`, 'success');
+            if (isHost && qrWrapper && qrcodeDiv) {
+                qrWrapper.style.display = 'flex';
+                qrcodeDiv.innerHTML = '';
+                
+                if (window.QRCode) {
+                    new QRCode(qrcodeDiv, { 
+                        text: `${window.location.origin}/?room=${currentRoomCode}`, 
+                        width: 180, 
+                        height: 180,
+                        colorDark: '#1a202c', 
+                        colorLight: '#ffffff',
+                        correctLevel: window.QRCode.CorrectLevel.M
+                    });
+                } else {
+                    log('QRCode library not loaded', 'error');
+                }
+            }
+        });
 
-    peer.on('connection', setupConnection);
-    
-    peer.on('error', (err) => {
-        log(`Error: ${err.type}`, 'error');
-        if (err.type === 'unavailable-id' && isHost) {
-            currentRoomCode = generateRoomCode();
-            roomCodeDisplay.textContent = currentRoomCode;
-            setTimeout(() => { peer.destroy(); createPeer(`${PEER_PREFIX}${currentRoomCode}`); }, 1000);
-        }
-    });
+        peer.on('connection', (connection) => {
+            log('Incoming connection!', 'success');
+            setupConnection(connection);
+        });
+        
+        peer.on('error', (err) => {
+            console.error('Peer error:', err);
+            log(`Error: ${err.type}`, 'error');
+            
+            if (err.type === 'unavailable-id' && isHost) {
+                log('Room code taken, generating new...', 'info');
+                currentRoomCode = generateRoomCode();
+                if (roomCodeDisplay) roomCodeDisplay.textContent = currentRoomCode;
+                setTimeout(() => { 
+                    if (peer) peer.destroy(); 
+                    createPeer(`${PEER_PREFIX}${currentRoomCode}`); 
+                }, 1000);
+            }
+        });
+        
+        peer.on('disconnected', () => {
+            log('Disconnected from PeerJS server', 'error');
+        });
+    } catch (err) {
+        console.error('Create peer error:', err);
+        log('Failed to create peer', 'error');
+    }
 }
 
+// ═══════════════════════════════════════
+// JOIN ROOM (CLIENT)
+// ═══════════════════════════════════════
 window.joinRoom = function(code) {
-    if (!code || code.length < 6) return;
-    code = code.toUpperCase();
-    connectionStatus.textContent = `Connecting to ${code}...`;
-    clientSpinner.style.display = 'block';
-    roomInputGroup.style.display = 'none';
+    if (!code || code.length < 6) {
+        log('Invalid room code', 'error');
+        return;
+    }
+    
+    code = code.toUpperCase().trim();
+    
+    try {
+        if (connectionStatus) connectionStatus.textContent = `Connecting to ${code}...`;
+        if (clientSpinner) clientSpinner.style.display = 'block';
+        if (roomInputGroup) roomInputGroup.style.display = 'none';
 
-    peer = new Peer(undefined, { config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } });
-    peer.on('open', () => {
-        const c = peer.connect(`${PEER_PREFIX}${code}`, { reliable: true, serialization: 'binary' });
-        setupConnection(c, code);
-        setTimeout(() => { if (!isConnectionReady) { log('Timeout', 'error'); clientSpinner.style.display = 'none'; roomInputGroup.style.display = 'flex'; } }, 15000);
-    });
-    peer.on('error', () => { log('Failed', 'error'); clientSpinner.style.display = 'none'; roomInputGroup.style.display = 'flex'; });
+        if (!window.Peer) {
+            log('PeerJS not loaded', 'error');
+            return;
+        }
+
+        peer = new Peer(undefined, { 
+            debug: 1,
+            config: { 
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ] 
+            } 
+        });
+        
+        peer.on('open', () => {
+            log('Client peer ready', 'success');
+            const targetPeerId = `${PEER_PREFIX}${code}`;
+            const connection = peer.connect(targetPeerId, { 
+                reliable: true, 
+                serialization: 'binary' 
+            });
+            
+            setupConnection(connection, code);
+            
+            // Timeout after 15 seconds
+            setTimeout(() => { 
+                if (!isConnectionReady) { 
+                    log('Connection timeout', 'error');
+                    if (connectionStatus) connectionStatus.textContent = 'Connection failed. Check code.';
+                    if (clientSpinner) clientSpinner.style.display = 'none';
+                    if (roomInputGroup) roomInputGroup.style.display = 'flex';
+                } 
+            }, 15000);
+        });
+        
+        peer.on('error', (err) => {
+            console.error('Client error:', err);
+            log(`Failed: ${err.type}`, 'error');
+            if (connectionStatus) connectionStatus.textContent = 'Failed to connect';
+            if (clientSpinner) clientSpinner.style.display = 'none';
+            if (roomInputGroup) roomInputGroup.style.display = 'flex';
+        });
+    } catch (err) {
+        console.error('Join room error:', err);
+        log('Failed to join room', 'error');
+    }
 };
 
+// ═══════════════════════════════════════
+// SETUP CONNECTION
+// ═══════════════════════════════════════
 function setupConnection(connection, code = null) {
-    conn = connection;
-    conn.on('open', () => {
-        isConnectionReady = true;
-        log('Connected!', 'success');
-        sendCard.style.display = 'block';
-        if (code) Storage.saveDevice({ code, name: prompt('Name this device?', 'Device') || 'Device' });
-        if (!isHost) { connectionStatus.textContent = '✅ Connected!'; clientSpinner.style.display = 'none'; }
-    });
-    conn.on('data', handleIncomingData);
-    conn.on('close', () => { isConnectionReady = false; sendCard.style.display = 'none'; log('Disconnected', 'error'); });
+    try {
+        conn = connection;
+        
+        conn.on('open', () => {
+            isConnectionReady = true;
+            log('Connected!', 'success');
+            
+            if (sendCard) sendCard.style.display = 'block';
+            
+            if (code) {
+                const deviceName = prompt('Name this device?', 'Device') || 'Device';
+                Storage.saveDevice({ code, name: deviceName });
+            }
+            
+            if (!isHost && connectionStatus) {
+                connectionStatus.textContent = '✅ Connected!';
+                connectionStatus.style.color = 'var(--success)';
+            }
+            
+            if (clientSpinner) clientSpinner.style.display = 'none';
+        });
+        
+        conn.on('data', (data) => {
+            try {
+                handleIncomingData(data);
+            } catch (err) {
+                console.error('Data handling error:', err);
+            }
+        });
+        
+        conn.on('close', () => { 
+            isConnectionReady = false; 
+            if (sendCard) sendCard.style.display = 'none';
+            log('Disconnected', 'error');
+            
+            if (!isHost && connectionStatus) {
+                connectionStatus.textContent = 'Disconnected. Try again.';
+                if (roomInputGroup) roomInputGroup.style.display = 'flex';
+            }
+        });
+        
+        conn.on('error', (err) => {
+            console.error('Connection error:', err);
+            isConnectionReady = false;
+            log('Connection error', 'error');
+        });
+    } catch (err) {
+        console.error('Setup connection error:', err);
+    }
 }
 
-$('btnFiles').onclick = () => toggleMode(false);
-$('btnFolder').onclick = () => toggleMode(true);
+// ═══════════════════════════════════════
+// FILE MODE TOGGLE
+// ═══════════════════════════════════════
+const btnFiles = $('btnFiles');
+const btnFolder = $('btnFolder');
+
+if (btnFiles) {
+    btnFiles.onclick = () => toggleMode(false);
+}
+
+if (btnFolder) {
+    btnFolder.onclick = () => toggleMode(true);
+}
 
 function toggleMode(isFolder) {
-    $('btnFiles').classList.toggle('active', !isFolder);
-    $('btnFolder').classList.toggle('active', isFolder);
-    $('dropLabel').setAttribute('for', isFolder ? 'folderInput' : 'fileInput');
-    $('dropText').textContent = isFolder ? 'Select Folder' : 'Select Files';
+    if (btnFiles) btnFiles.classList.toggle('active', !isFolder);
+    if (btnFolder) btnFolder.classList.toggle('active', isFolder);
+    
+    const dropLabel = $('dropLabel');
+    const dropText = $('dropText');
+    
+    if (dropLabel) {
+        dropLabel.setAttribute('for', isFolder ? 'folderInput' : 'fileInput');
+    }
+    
+    if (dropText) {
+        dropText.textContent = isFolder ? 'Select Folder' : 'Select Files';
+    }
 }
 
-fileInput.onchange = e => handleFiles(e.target.files);
-folderInput.onchange = e => handleFiles(e.target.files);
+// ═══════════════════════════════════════
+// FILE INPUT HANDLERS
+// ═══════════════════════════════════════
+if (fileInput) {
+    fileInput.onchange = e => handleFiles(e.target.files);
+}
 
+if (folderInput) {
+    folderInput.onchange = e => handleFiles(e.target.files);
+}
+
+// Drop zone
+const dropZone = $('dropZone');
+if (dropZone) {
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-over');
+    });
+    
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('drag-over');
+    });
+    
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        if (fileInput) {
+            fileInput.files = e.dataTransfer.files;
+            handleFiles(e.dataTransfer.files);
+        }
+    });
+}
+
+// ═══════════════════════════════════════
+// SEND FILES
+// ═══════════════════════════════════════
 async function handleFiles(files) {
-    if (!isConnectionReady) return log('Not connected', 'error');
-    fileListEl.innerHTML = '';
+    if (!isConnectionReady) {
+        log('Not connected', 'error');
+        return;
+    }
+    
+    if (!files || files.length === 0) return;
+    
+    if (fileListEl) fileListEl.innerHTML = '';
+    
+    log(`Sending ${files.length} file(s)...`, 'success');
+    
     for (const file of files) {
+        // Skip empty directory placeholders
         if (file.size === 0 && file.name.endsWith('/')) continue;
+        
         const item = document.createElement('div');
         item.className = 'file-item';
-        item.innerHTML = `<span>${file.name}</span><span class="size status">Pending</span>`;
-        fileListEl.appendChild(item);
-        await sendFile(file, item.querySelector('.status'));
-        Storage.addHistory({ type: 'sent', name: file.name, size: file.size });
+        item.innerHTML = `<span>${escapeHtml(file.name)}</span><span class="size status">Pending</span>`;
+        
+        if (fileListEl) fileListEl.appendChild(item);
+        
+        const statusEl = item.querySelector('.status');
+        try {
+            await sendFile(file, statusEl);
+            Storage.addHistory({ type: 'sent', name: file.name, size: file.size });
+        } catch (err) {
+            console.error('Send error:', err);
+            if (statusEl) {
+                statusEl.textContent = 'Failed ✗';
+                statusEl.style.color = 'var(--danger)';
+            }
+        }
     }
+    
+    log('All files sent!', 'success');
 }
 
 function sendFile(file, statusEl) {
-    return new Promise(resolve => {
-        const chunkSize = 16 * 1024;
+    return new Promise((resolve, reject) => {
+        if (!conn || !conn.open) {
+            if (statusEl) {
+                statusEl.textContent = 'No connection ✗';
+                statusEl.style.color = 'var(--danger)';
+            }
+            return reject(new Error('Not connected'));
+        }
+        
+        const chunkSize = 16 * 1024; // 16KB chunks
         const totalChunks = Math.max(1, Math.ceil(file.size / chunkSize));
         let i = 0;
-        conn.send({ type: 'start', name: file.name, size: file.size, chunks: totalChunks });
-        statusEl.textContent = 'Sending...';
-
-        const next = () => {
-            if (i >= totalChunks) { conn.send({ type: 'end', name: file.name }); statusEl.textContent = 'Done ✓'; statusEl.style.color = 'var(--success)'; return resolve(); }
-            if (conn.bufferedAmount > 1024 * 1024) return setTimeout(next, 50);
+        
+        try {
+            conn.send({ 
+                type: 'start', 
+                name: file.name, 
+                size: file.size, 
+                chunks: totalChunks 
+            });
             
-            const start = i * chunkSize;
-            const reader = new FileReader();
-            reader.onload = e => {
-                conn.send({ type: 'chunk', i, data: e.target.result });
-                i++;
-                statusEl.textContent = `${Math.round((i/totalChunks)*100)}%`;
-                setTimeout(next, 5);
+            if (statusEl) statusEl.textContent = 'Sending...';
+            
+            const next = () => {
+                if (!conn || !conn.open) {
+                    if (statusEl) {
+                        statusEl.textContent = 'Disconnected ✗';
+                        statusEl.style.color = 'var(--danger)';
+                    }
+                    return reject(new Error('Connection lost'));
+                }
+                
+                if (i >= totalChunks) { 
+                    conn.send({ type: 'end', name: file.name }); 
+                    if (statusEl) {
+                        statusEl.textContent = 'Done ✓'; 
+                        statusEl.style.color = 'var(--success)';
+                    }
+                    return resolve(); 
+                }
+                
+                // Flow control
+                if (conn.bufferedAmount > 1024 * 1024) {
+                    return setTimeout(next, 50);
+                }
+                
+                // Handle 0-byte files
+                if (file.size === 0) {
+                    i++;
+                    return next();
+                }
+                
+                const start = i * chunkSize;
+                const end = Math.min(start + chunkSize, file.size);
+                const blob = file.slice(start, end);
+                
+                const reader = new FileReader();
+                reader.onload = e => {
+                    try {
+                        conn.send({ 
+                            type: 'chunk', 
+                            i, 
+                            data: e.target.result 
+                        });
+                        i++;
+                        if (statusEl) {
+                            statusEl.textContent = `${Math.round((i/totalChunks)*100)}%`;
+                        }
+                        setTimeout(next, 5);
+                    } catch (err) {
+                        console.error('Send chunk error:', err);
+                        if (statusEl) {
+                            statusEl.textContent = 'Error ✗';
+                            statusEl.style.color = 'var(--danger)';
+                        }
+                        reject(err);
+                    }
+                };
+                
+                reader.onerror = () => {
+                    console.error('File read error');
+                    if (statusEl) {
+                        statusEl.textContent = 'Read Error ✗';
+                        statusEl.style.color = 'var(--danger)';
+                    }
+                    reject(new Error('File read error'));
+                };
+                
+                reader.readAsArrayBuffer(blob);
             };
-            reader.readAsArrayBuffer(file.slice(start, Math.min(start + chunkSize, file.size)));
-        };
-        next();
+            
+            next();
+        } catch (err) {
+            console.error('Send file error:', err);
+            if (statusEl) {
+                statusEl.textContent = 'Error ✗';
+                statusEl.style.color = 'var(--danger)';
+            }
+            reject(err);
+        }
     });
 }
 
-let currentMeta = null, chunks = [], receivedCount = 0;
+// ═══════════════════════════════════════
+// RECEIVE FILES
+// ═══════════════════════════════════════
+let currentMeta = null;
+let chunks = [];
+let receivedCount = 0;
 
 function handleIncomingData(data) {
-    if (data.type === 'start') {
-        currentMeta = data; chunks = new Array(data.chunks); receivedCount = 0;
-        receiveCard.style.display = 'block';
-        downloadAllBtn.style.display = 'none';
-        
-        const item = document.createElement('div');
-        item.className = 'file-card';
-        item.innerHTML = `<div class="file-card-header"><span>${data.name}</span><span>${formatSize(data.size)}</span></div>
-                          <div class="progress-bar"><div class="progress-fill"></div></div><p class="progress-text">0%</p>`;
-        transferLog.appendChild(item);
-    } 
-    else if (data.type === 'chunk') {
-        chunks[data.i] = data.data;
-        receivedCount += data.data.byteLength;
-        const pct = Math.round((receivedCount / currentMeta.size) * 100);
-        const card = transferLog.lastElementChild;
-        if (card) { card.querySelector('.progress-fill').style.width = `${pct}%`; card.querySelector('.progress-text').textContent = `${pct}%`; }
-    } 
-    else if (data.type === 'end') {
-        const blob = new Blob(chunks.filter(c => c));
-        receivedFiles.push({ name: currentMeta.name, blob });
-        Storage.addHistory({ type: 'received', name: currentMeta.name, size: currentMeta.size });
-        
-        const card = transferLog.lastElementChild;
-        if (card) { card.querySelector('.progress-text').textContent = 'Received'; card.querySelector('.progress-fill').classList.add('complete'); }
-        
-        downloadAllBtn.style.display = 'block';
-        currentMeta = null; chunks = [];
+    try {
+        if (data.type === 'start') {
+            currentMeta = data;
+            chunks = new Array(data.chunks);
+            receivedCount = 0;
+            
+            if (receiveCard) receiveCard.style.display = 'block';
+            if (downloadAllBtn) downloadAllBtn.style.display = 'none';
+            
+            const item = document.createElement('div');
+            item.className = 'file-card';
+            item.innerHTML = `
+                <div class="file-card-header">
+                    <span>${escapeHtml(data.name)}</span>
+                    <span>${formatSize(data.size)}</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill"></div>
+                </div>
+                <p class="progress-text">0%</p>
+            `;
+            
+            if (transferLog) transferLog.appendChild(item);
+            
+            log(`Receiving: ${data.name}`, 'info');
+        } 
+        else if (data.type === 'chunk') {
+            chunks[data.i] = data.data;
+            receivedCount += data.data.byteLength;
+            
+            const pct = Math.round((receivedCount / currentMeta.size) * 100);
+            const card = transferLog ? transferLog.lastElementChild : null;
+            
+            if (card) {
+                const fill = card.querySelector('.progress-fill');
+                const text = card.querySelector('.progress-text');
+                if (fill) fill.style.width = `${pct}%`;
+                if (text) text.textContent = `${pct}%`;
+            }
+        } 
+        else if (data.type === 'end') {
+            const blob = new Blob(chunks.filter(c => c !== undefined));
+            receivedFiles.push({ name: currentMeta.name, blob });
+            
+            Storage.addHistory({ 
+                type: 'received', 
+                name: currentMeta.name, 
+                size: currentMeta.size 
+            });
+            
+            const card = transferLog ? transferLog.lastElementChild : null;
+            if (card) {
+                const text = card.querySelector('.progress-text');
+                const fill = card.querySelector('.progress-fill');
+                if (text) text.textContent = 'Received';
+                if (fill) fill.classList.add('complete');
+            }
+            
+            if (downloadAllBtn) downloadAllBtn.style.display = 'block';
+            
+            log(`Received: ${currentMeta.name}`, 'success');
+            
+            // Reset
+            currentMeta = null;
+            chunks = [];
+            receivedCount = 0;
+        }
+    } catch (err) {
+        console.error('Handle incoming data error:', err);
+        log('Error receiving data', 'error');
     }
 }
 
-downloadAllBtn.onclick = async () => {
-    log(`Downloading ${receivedFiles.length} files...`);
-    for (const file of receivedFiles) {
-        const url = URL.createObjectURL(file.blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = file.name;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        await new Promise(r => setTimeout(r, 500));
-    }
-    receivedFiles = [];
-    downloadAllBtn.style.display = 'none';
-    transferLog.innerHTML = '';
-    log('All files downloaded!', 'success');
-};
+// ═══════════════════════════════════════
+// DOWNLOAD ALL
+// ═══════════════════════════════════════
+if (downloadAllBtn) {
+    downloadAllBtn.onclick = async () => {
+        if (receivedFiles.length === 0) {
+            log('No files to download', 'error');
+            return;
+        }
+        
+        log(`Downloading ${receivedFiles.length} files...`, 'info');
+        
+        for (let i = 0; i < receivedFiles.length; i++) {
+            const file = receivedFiles[i];
+            try {
+                const url = URL.createObjectURL(file.blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = file.name;
+                a.style.display = 'none';
+                
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                URL.revokeObjectURL(url);
+                
+                // Delay between downloads to prevent browser blocking
+                await new Promise(r => setTimeout(r, 500));
+                
+                log(`Downloaded ${i + 1}/${receivedFiles.length}: ${file.name}`, 'success');
+            } catch (err) {
+                console.error('Download error:', err);
+                log(`Failed to download: ${file.name}`, 'error');
+            }
+        }
+        
+        receivedFiles = [];
+        if (downloadAllBtn) downloadAllBtn.style.display = 'none';
+        if (transferLog) transferLog.innerHTML = '';
+        
+        log('All files downloaded!', 'success');
+    };
+}
 
-copyCodeBtn.onclick = () => { navigator.clipboard.writeText(currentRoomCode); copyCodeBtn.textContent = '✅ Copied'; setTimeout(() => copyCodeBtn.textContent = '📋 Copy', 2000); };
-shareCodeBtn.onclick = () => { if (navigator.share) navigator.share({ title: 'P2P Transfer', url: `${window.location.origin}/?room=${currentRoomCode}` }); else copyCodeBtn.click(); };
-clearHistoryBtn.onclick = () => { if(confirm('Clear history?')) Storage.clearHistory(); };
+// ═══════════════════════════════════════
+// BUTTON HANDLERS
+// ═══════════════════════════════════════
+if (copyCodeBtn) {
+    copyCodeBtn.onclick = async () => {
+        if (!currentRoomCode) return;
+        
+        try {
+            await navigator.clipboard.writeText(currentRoomCode);
+            copyCodeBtn.textContent = '✅ Copied';
+            setTimeout(() => {
+                copyCodeBtn.textContent = '📋 Copy';
+            }, 2000);
+        } catch {
+            // Fallback
+            const textarea = document.createElement('textarea');
+            textarea.value = currentRoomCode;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            copyCodeBtn.textContent = '✅ Copied';
+            setTimeout(() => {
+                copyCodeBtn.textContent = '📋 Copy';
+            }, 2000);
+        }
+    };
+}
 
-document.addEventListener('DOMContentLoaded', init);
+if (shareCodeBtn) {
+    shareCodeBtn.onclick = () => {
+        if (!currentRoomCode) return;
+        
+        const shareData = {
+            title: 'QR P2P Transfer',
+            text: `Join my transfer room: ${currentRoomCode}`,
+            url: `${window.location.origin}/?room=${currentRoomCode}`
+        };
+        
+        if (navigator.share) {
+            navigator.share(shareData).catch(() => {
+                // User cancelled
+            });
+        } else {
+            // Fallback to copy
+            if (copyCodeBtn) copyCodeBtn.click();
+        }
+    };
+}
+
+if (clearHistoryBtn) {
+    clearHistoryBtn.onclick = () => {
+        if (confirm('Clear all transfer history?')) {
+            Storage.clearHistory();
+        }
+    };
+}
+
+if (joinRoomBtn) {
+    joinRoomBtn.onclick = () => {
+        if (roomCodeInput) {
+            const code = roomCodeInput.value.trim();
+            window.joinRoom(code);
+        }
+    };
+}
+
+// Auto-uppercase room code input
+if (roomCodeInput) {
+    roomCodeInput.addEventListener('input', (e) => {
+        e.target.value = e.target.value.toUpperCase().replace(/[^A-HJKMNP-Z2-9]/g, '');
+    });
+    
+    roomCodeInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            const code = roomCodeInput.value.trim();
+            window.joinRoom(code);
+        }
+    });
+}
+
+// ══════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
