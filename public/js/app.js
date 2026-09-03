@@ -1,4 +1,4 @@
-// app.js - TRUE BIDIRECTIONAL P2P (FINAL MOBILE FIX)
+// app.js - TRUE BIDIRECTIONAL P2P (BINARY FIX)
 
 // ── DOM References ──
 const hostView = document.getElementById('hostView');
@@ -12,7 +12,6 @@ const fileInput = document.getElementById('fileInput');
 const fileListEl = document.getElementById('fileList');
 const transferLog = document.getElementById('transferLog');
 const statusLog = document.getElementById('statusLog');
-const dropZone = document.getElementById('dropZone');
 
 // ── State ──
 let peer = null;
@@ -82,6 +81,7 @@ function showQRCode(peerId) {
     qrWrapper.style.display = 'flex';
     
     document.getElementById('qrcode').innerHTML = '';
+    // eslint-disable-next-line no-undef
     new QRCode(document.getElementById('qrcode'), {
         text: clientUrl, width: 200, height: 200,
         colorDark: '#1a202c', colorLight: '#ffffff',
@@ -95,9 +95,10 @@ function connectToHost(targetId) {
     connectionStatus.textContent = `Connecting to ${targetId.substring(0, 8)}...`;
     log(`📡 Attempting to connect to: ${targetId}`, 'info');
     
+    // 🚨 CRITICAL FIX: Changed serialization from 'json' to 'binary'
     const connection = peer.connect(targetId, { 
         reliable: true, 
-        serialization: 'json' 
+        serialization: 'binary' 
     });
     
     setupConnection(connection);
@@ -131,7 +132,7 @@ function setupConnection(connection) {
     conn.on('data', handleIncomingData);
     
     conn.on('close', () => {
-        log('️ Peer disconnected.', 'error');
+        log('⚠️ Peer disconnected.', 'error');
         isConnectionReady = false;
         sendCard.style.display = 'none';
     });
@@ -142,21 +143,18 @@ function setupConnection(connection) {
     });
 }
 
-// ─ Enable Send/Receive on BOTH Devices ──
+// ── Enable Send/Receive on BOTH Devices ──
 function enableSendReceive() {
-    log(' Enabling Send & Receive capabilities...', 'success');
+    log('🚀 Enabling Send & Receive capabilities...', 'success');
     sendCard.style.display = 'block';
     log('✅ You can now SEND and RECEIVE files!', 'success');
 }
 
-// ── 5. SENDING Logic (NATIVE LABEL CLICK - MOST RELIABLE) ──
-
-// File input change handler - this is the ONLY place we handle file selection
+// ── 5. SENDING Logic ──
 fileInput.addEventListener('change', (e) => {
-    log(` Files selected: ${e.target.files.length}`, 'info');
+    log(`📂 Files selected: ${e.target.files.length}`, 'info');
     handleFiles(e.target.files);
-    // Reset input so same file can be selected again
-    fileInput.value = '';
+    fileInput.value = ''; // Reset so same file can be selected again
 });
 
 async function handleFiles(files) {
@@ -199,7 +197,8 @@ async function handleFiles(files) {
 
 function sendFile(file, statusEl) {
     return new Promise((resolve) => {
-        const chunkSize = 8 * 1024;
+        // 16KB chunks are optimal for WebRTC binary transfer
+        const chunkSize = 16 * 1024; 
         const totalChunks = Math.ceil(file.size / chunkSize);
         let currentChunk = 0;
 
@@ -218,6 +217,7 @@ function sendFile(file, statusEl) {
                     return;
                 }
                 
+                // Flow control: pause if buffer gets too full
                 if (conn.bufferedAmount > 1024 * 1024) { 
                     setTimeout(sendNextChunk, 50); 
                     return; 
@@ -230,6 +230,7 @@ function sendFile(file, statusEl) {
                 
                 reader.onload = (e) => {
                     try {
+                        // e.target.result is an ArrayBuffer, which 'binary' serialization handles perfectly
                         conn.send({ type: 'chunk', index: currentChunk, data: e.target.result });
                         currentChunk++;
                         statusEl.textContent = `${Math.round((currentChunk / totalChunks) * 100)}%`;
@@ -291,8 +292,11 @@ function handleIncomingData(data) {
             
         } else if (data.type === 'chunk') {
             if (!currentFileMeta) return;
+            
+            // Store the ArrayBuffer in the correct index
             receivedChunks[data.index] = data.data;
             totalBytesReceived += data.data.byteLength;
+            
             const pct = Math.min(100, Math.round((totalBytesReceived / currentFileMeta.size) * 100));
             const fill = document.getElementById(`fill-${fileCounter}`);
             const text = document.getElementById(`text-${fileCounter}`);
@@ -310,8 +314,11 @@ function handleIncomingData(data) {
             
             const card = document.getElementById(`card-${fileCounter}`);
             const fileName = currentFileMeta ? currentFileMeta.name : 'downloaded_file';
+            
+            // Filter out any undefined chunks and create the Blob
             const validChunks = receivedChunks.filter(c => c !== undefined);
             const fileBlob = new Blob(validChunks);
+            
             log(`💾 Blob created: ${formatSize(fileBlob.size)} bytes`, 'success');
             
             const actionsDiv = document.createElement('div');
@@ -372,6 +379,7 @@ function handleIncomingData(data) {
             actionsDiv.appendChild(discardBtn);
             card.appendChild(actionsDiv);
             
+            // Reset for next file
             currentFileMeta = null; 
             receivedChunks = []; 
             totalBytesReceived = 0;
