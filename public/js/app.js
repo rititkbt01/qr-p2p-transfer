@@ -1,4 +1,4 @@
-// app.js - COMPLETE WITH DISCONNECT & MODE SWITCHING
+// app.js - BROADCAST MODE (1-to-Many)
 
 const $ = id => {
     const el = document.getElementById(id);
@@ -24,6 +24,11 @@ const fileListEl = $('fileList');
 const transferLog = $('transferLog');
 const downloadAllBtn = $('downloadAllBtn');
 const disconnectBtn = $('disconnectBtn');
+const closeRoomBtn = $('closeRoomBtn');
+const leaveRoomBtn = $('leaveRoomBtn');
+const connectedDevicesSection = $('connectedDevicesSection');
+const connectedDevicesList = $('connectedDevicesList');
+const deviceCount = $('deviceCount');
 const savedDevicesList = $('savedDevicesList');
 const noDevicesHint = $('noDevicesHint');
 const historyList = $('historyList');
@@ -35,7 +40,8 @@ const hostModeBtn = $('hostModeBtn');
 const clientModeBtn = $('clientModeBtn');
 
 let peer = null;
-let conn = null;
+let connections = []; // Array for multiple connections (host)
+let conn = null; // Single connection (client)
 let isConnectionReady = false;
 let isHost = false;
 let currentRoomCode = null;
@@ -43,7 +49,7 @@ let receivedFiles = [];
 const PEER_PREFIX = 'qrlan-';
 const ROOM_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
-// ═══════════════════════════════════════════
+// ══════════════════════════════════════════
 // TABS & MODE TOGGLE
 // ═══════════════════════════════════════════
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -78,14 +84,20 @@ function setClientMode() {
 }
 
 function disconnect() {
-    if (conn) {
-        conn.close();
+    if (isHost) {
+        // Close all connections
+        connections.forEach(c => c.close());
+        connections = [];
+    } else {
+        if (conn) conn.close();
         conn = null;
     }
+    
     if (peer) {
         peer.destroy();
         peer = null;
     }
+    
     isConnectionReady = false;
     currentRoomCode = null;
     receivedFiles = [];
@@ -94,8 +106,10 @@ function disconnect() {
     if (receiveCard) receiveCard.style.display = 'none';
     if (transferLog) transferLog.innerHTML = '';
     if (downloadAllBtn) downloadAllBtn.style.display = 'none';
+    if (connectedDevicesSection) connectedDevicesSection.style.display = 'none';
+    if (closeRoomBtn) closeRoomBtn.style.display = 'none';
+    if (leaveRoomBtn) leaveRoomBtn.style.display = 'none';
     
-    // Reset to host mode
     setHostMode();
     log('Disconnected. You can now create or join a new room.', 'info');
 }
@@ -103,9 +117,11 @@ function disconnect() {
 if (hostModeBtn) hostModeBtn.onclick = setHostMode;
 if (clientModeBtn) clientModeBtn.onclick = setClientMode;
 if (disconnectBtn) disconnectBtn.onclick = disconnect;
+if (closeRoomBtn) closeRoomBtn.onclick = disconnect;
+if (leaveRoomBtn) leaveRoomBtn.onclick = disconnect;
 
 // ═══════════════════════════════════════════
-// UTILITIES & HEALTH CHECK
+// UTILITIES
 // ═══════════════════════════════════════════
 function log(msg, type = 'info') {
     console.log(`[${type.toUpperCase()}] ${msg}`);
@@ -131,14 +147,24 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-function checkConnection() {
-    if (!conn || !conn.open) {
-        isConnectionReady = false;
-        if (sendCard) sendCard.style.display = 'none';
-        log('⚠️ Connection lost. Please disconnect and rejoin.', 'error');
-        return false;
+function updateConnectedDevicesUI() {
+    if (!connectedDevicesSection || !connectedDevicesList || !deviceCount) return;
+    
+    if (connections.length === 0) {
+        connectedDevicesSection.style.display = 'none';
+        return;
     }
-    return true;
+    
+    connectedDevicesSection.style.display = 'block';
+    deviceCount.textContent = connections.length;
+    
+    connectedDevicesList.innerHTML = connections.map((c, i) => `
+        <div class="connected-device-item">
+            <span class="device-status">🟢</span>
+            <span class="device-name">Device ${i + 1}</span>
+            <span class="device-id">${c.peer.substring(0, 8)}...</span>
+        </div>
+    `).join('');
 }
 
 // ═══════════════════════════════════════════
@@ -237,7 +263,7 @@ function startHost() {
     try {
         currentRoomCode = generateRoomCode();
         if (roomCodeDisplay) roomCodeDisplay.textContent = currentRoomCode;
-        log(`Generated room: ${currentRoomCode}`);
+        log(`Created room: ${currentRoomCode}`);
         createPeer(`${PEER_PREFIX}${currentRoomCode}`);
     } catch (err) {
         console.error('Start host error:', err);
@@ -260,7 +286,40 @@ function createPeer(peerId) {
                 }
             }
         });
-        peer.on('connection', (connection) => { log('Incoming connection!', 'success'); setupConnection(connection); });
+        
+        peer.on('connection', (connection) => { 
+            log(`New device connected: ${connection.peer}`, 'success');
+            connections.push(connection);
+            updateConnectedDevicesUI();
+            
+            // Setup connection handlers
+            connection.on('open', () => {
+                isConnectionReady = true;
+                if (sendCard) sendCard.style.display = 'block';
+                if (closeRoomBtn) closeRoomBtn.style.display = 'inline-flex';
+                log(`${connections.length} device(s) connected`, 'success');
+            });
+            
+            connection.on('close', () => {
+                const idx = connections.indexOf(connection);
+                if (idx > -1) connections.splice(idx, 1);
+                updateConnectedDevicesUI();
+                log(`Device disconnected. ${connections.length} remaining`, 'info');
+                if (connections.length === 0) {
+                    isConnectionReady = false;
+                    if (sendCard) sendCard.style.display = 'none';
+                    if (closeRoomBtn) closeRoomBtn.style.display = 'none';
+                }
+            });
+            
+            connection.on('error', (err) => {
+                console.error('Connection error:', err);
+                const idx = connections.indexOf(connection);
+                if (idx > -1) connections.splice(idx, 1);
+                updateConnectedDevicesUI();
+            });
+        });
+        
         peer.on('error', (err) => {
             console.error('Peer error:', err);
             log(`Error: ${err.type}`, 'error');
@@ -286,7 +345,37 @@ window.joinRoom = function(code) {
         peer.on('open', () => {
             log('Client peer ready', 'success');
             const connection = peer.connect(`${PEER_PREFIX}${code}`, { reliable: true, serialization: 'binary' });
-            setupConnection(connection, code);
+            conn = connection;
+            
+            connection.on('open', () => {
+                isConnectionReady = true;
+                log('Connected!', 'success');
+                if (sendCard) sendCard.style.display = 'block';
+                if (connectionStatus) {
+                    connectionStatus.textContent = `✅ Connected to ${code}`;
+                    connectionStatus.style.color = 'var(--success)';
+                }
+                if (clientSpinner) clientSpinner.style.display = 'none';
+                if (leaveRoomBtn) leaveRoomBtn.style.display = 'inline-flex';
+            });
+            
+            connection.on('data', (data) => { try { handleIncomingData(data); } catch (err) { console.error('Data handling error:', err); } });
+            connection.on('close', () => { 
+                isConnectionReady = false; 
+                if (sendCard) sendCard.style.display = 'none';
+                log('Disconnected from host', 'error');
+                if (connectionStatus) {
+                    connectionStatus.textContent = 'Disconnected. Click Leave to rejoin.';
+                    connectionStatus.style.color = 'var(--danger)';
+                }
+                if (leaveRoomBtn) leaveRoomBtn.style.display = 'inline-flex';
+            });
+            connection.on('error', (err) => {
+                console.error('Connection error:', err);
+                isConnectionReady = false;
+                log('Connection error', 'error');
+            });
+            
             setTimeout(() => { 
                 if (!isConnectionReady) { 
                     log('Connection timeout', 'error');
@@ -306,44 +395,9 @@ window.joinRoom = function(code) {
     } catch (err) { console.error('Join room error:', err); log('Failed to join room', 'error'); }
 };
 
-function setupConnection(connection, code = null) {
-    try {
-        conn = connection;
-        conn.on('open', () => {
-            isConnectionReady = true;
-            log('Connected!', 'success');
-            if (sendCard) sendCard.style.display = 'block';
-            if (code) {
-                const deviceName = prompt('Name this device?', 'Device') || 'Device';
-                Storage.saveDevice({ code, name: deviceName });
-            }
-            if (!isHost && connectionStatus) {
-                connectionStatus.textContent = '✅ Connected!';
-                connectionStatus.style.color = 'var(--success)';
-            }
-            if (clientSpinner) clientSpinner.style.display = 'none';
-        });
-        conn.on('data', (data) => { try { handleIncomingData(data); } catch (err) { console.error('Data handling error:', err); } });
-        conn.on('close', () => { 
-            isConnectionReady = false; 
-            if (sendCard) sendCard.style.display = 'none';
-            log('⚠️ Disconnected.', 'error');
-            if (!isHost && connectionStatus) {
-                connectionStatus.textContent = 'Disconnected. Click Disconnect to rejoin.';
-                connectionStatus.style.color = 'var(--danger)';
-            }
-        });
-        conn.on('error', (err) => {
-            console.error('Connection error:', err);
-            isConnectionReady = false;
-            log('⚠️ Connection error.', 'error');
-        });
-    } catch (err) { console.error('Setup connection error:', err); }
-}
-
 // ═══════════════════════════════════════════
-// FILE HANDLING & SENDING
-// ═══════════════════════════════════════════
+// FILE HANDLING & SENDING (BROADCAST)
+// ══════════════════════════════════════════
 const btnFiles = $('btnFiles');
 const btnFolder = $('btnFolder');
 if (btnFiles) btnFiles.onclick = () => toggleMode(false);
@@ -373,10 +427,21 @@ if (dropZone) {
 }
 
 async function handleFiles(files) {
-    if (!checkConnection()) return;
+    if (isHost) {
+        if (connections.length === 0) {
+            log('No devices connected!', 'error');
+            return;
+        }
+    } else {
+        if (!conn || !conn.open) {
+            log('Not connected!', 'error');
+            return;
+        }
+    }
+    
     if (!files || files.length === 0) return;
     if (fileListEl) fileListEl.innerHTML = '';
-    log(`Sending ${files.length} file(s)...`, 'success');
+    log(`Sending ${files.length} file(s) to ${isHost ? connections.length : 1} device(s)...`, 'success');
     
     for (const file of files) {
         if (file.size === 0 && file.name.endsWith('/')) continue;
@@ -387,12 +452,15 @@ async function handleFiles(files) {
         const statusEl = item.querySelector('.status');
         
         try {
-            if (!checkConnection()) {
-                statusEl.textContent = 'Disconnected ✗';
-                statusEl.style.color = 'var(--danger)';
-                break;
+            if (isHost) {
+                // Broadcast to all connections
+                for (const connection of connections) {
+                    await sendFileToConnection(connection, file, statusEl);
+                }
+            } else {
+                // Send to single connection
+                await sendFileToConnection(conn, file, statusEl);
             }
-            await sendFile(file, statusEl);
             Storage.addHistory({ type: 'sent', name: file.name, size: file.size });
         } catch (err) {
             console.error('Send error:', err);
@@ -402,9 +470,9 @@ async function handleFiles(files) {
     log('Transfer session complete.', 'success');
 }
 
-function sendFile(file, statusEl) {
+function sendFileToConnection(connection, file, statusEl) {
     return new Promise((resolve, reject) => {
-        if (!conn || !conn.open) {
+        if (!connection || !connection.open) {
             if (statusEl) { statusEl.textContent = 'No connection ✗'; statusEl.style.color = 'var(--danger)'; }
             return reject(new Error('Not connected'));
         }
@@ -412,19 +480,19 @@ function sendFile(file, statusEl) {
         const totalChunks = Math.max(1, Math.ceil(file.size / chunkSize));
         let i = 0;
         try {
-            conn.send({ type: 'start', name: file.name, size: file.size, chunks: totalChunks });
+            connection.send({ type: 'start', name: file.name, size: file.size, chunks: totalChunks });
             if (statusEl) statusEl.textContent = 'Sending...';
             const next = () => {
-                if (!conn || !conn.open) {
+                if (!connection || !connection.open) {
                     if (statusEl) { statusEl.textContent = 'Disconnected ✗'; statusEl.style.color = 'var(--danger)'; }
                     return reject(new Error('Connection lost'));
                 }
                 if (i >= totalChunks) { 
-                    conn.send({ type: 'end', name: file.name }); 
+                    connection.send({ type: 'end', name: file.name }); 
                     if (statusEl) { statusEl.textContent = 'Done ✓'; statusEl.style.color = 'var(--success)'; }
                     return resolve(); 
                 }
-                if (conn.bufferedAmount > 1024 * 1024) return setTimeout(next, 50);
+                if (connection.bufferedAmount > 1024 * 1024) return setTimeout(next, 50);
                 if (file.size === 0) { i++; return next(); }
                 const start = i * chunkSize;
                 const end = Math.min(start + chunkSize, file.size);
@@ -432,7 +500,7 @@ function sendFile(file, statusEl) {
                 const reader = new FileReader();
                 reader.onload = e => {
                     try {
-                        conn.send({ type: 'chunk', i, data: e.target.result });
+                        connection.send({ type: 'chunk', i, data: e.target.result });
                         i++;
                         if (statusEl) statusEl.textContent = `${Math.round((i/totalChunks)*100)}%`;
                         setTimeout(next, 5);
@@ -524,7 +592,7 @@ function handleIncomingData(data) {
     }
 }
 
-// ═══════════════════════════════════════════
+// ══════════════════════════════════════════
 // DOWNLOAD ALL & UI ACTIONS
 // ═══════════════════════════════════════════
 if (downloadAllBtn) {
@@ -565,7 +633,7 @@ if (copyCodeBtn) {
             textarea.value = currentRoomCode;
             document.body.appendChild(textarea); textarea.select(); document.execCommand('copy'); document.body.removeChild(textarea);
             copyCodeBtn.textContent = '✅ Copied';
-            setTimeout(() => { copyCodeBtn.textContent = '📋 Copy'; }, 2000);
+            setTimeout(() => { copyCodeBtn.textContent = ' Copy'; }, 2000);
         }
     };
 }

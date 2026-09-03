@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>QR P2P Transfer</title>
+    <title>QR P2P Transfer - Broadcast</title>
     <meta name="description" content="Fast, secure, peer-to-peer file transfer">
     <meta name="theme-color" content="#0f172a">
     <link rel="manifest" href="/manifest.json">
@@ -20,7 +20,7 @@
     <div class="container">
         <header>
             <h1>📤 QR P2P Transfer</h1>
-            <p>Direct device-to-device. No server. No limits.</p>
+            <p>Broadcast to multiple devices simultaneously</p>
         </header>
 
         <main>
@@ -37,7 +37,7 @@
                     
                     <!-- MODE TOGGLE -->
                     <div class="mode-toggle connection-mode-toggle">
-                        <button class="toggle-btn active" id="hostModeBtn" type="button">📤 Create Room</button>
+                        <button class="toggle-btn active" id="hostModeBtn" type="button"> Create Room</button>
                         <button class="toggle-btn" id="clientModeBtn" type="button">📥 Join Room</button>
                     </div>
                     
@@ -47,7 +47,7 @@
                             <p class="room-label">Your Room Code</p>
                             <div class="room-code-display" id="roomCodeDisplay">------</div>
                             <div class="room-actions">
-                                <button id="copyCodeBtn" class="btn-action" title="Copy code"> Copy</button>
+                                <button id="copyCodeBtn" class="btn-action" title="Copy code">📋 Copy</button>
                                 <button id="shareCodeBtn" class="btn-action" title="Share link">🔗 Share</button>
                             </div>
                         </div>
@@ -55,7 +55,17 @@
                         <div class="qr-wrapper" id="qrWrapper">
                             <div id="qrcode"></div>
                         </div>
-                        <p id="hostStatus" class="hint">Waiting for connection...</p>
+                        
+                        <!-- Connected Devices List -->
+                        <div id="connectedDevicesSection" style="display: none; margin-top: 20px;">
+                            <h3 style="font-size: 0.9rem; color: var(--text-dim); margin-bottom: 10px;">
+                                Connected Devices (<span id="deviceCount">0</span>)
+                            </h3>
+                            <div id="connectedDevicesList" class="connected-devices-list"></div>
+                        </div>
+                        
+                        <p id="hostStatus" class="hint">Waiting for connections...</p>
+                        <button id="closeRoomBtn" class="btn-action" style="display: none; margin-top: 15px; background: var(--danger);">🚪 Close Room</button>
                     </div>
                     
                     <!-- Client View -->
@@ -67,7 +77,8 @@
                                 <button id="joinRoomBtn" class="btn-primary">Join</button>
                             </div>
                             <div class="spinner" id="clientSpinner" style="display:none;"></div>
-                            <p class="hint">Or scan the QR code on sender's device</p>
+                            <p class="hint">Or scan the QR code</p>
+                            <button id="leaveRoomBtn" class="btn-action" style="display: none; margin-top: 15px;">🚪 Leave Room</button>
                         </div>
                     </div>
                 </section>
@@ -75,7 +86,7 @@
                 <section class="card" id="sendCard" style="display: none;">
                     <div class="card-header-row">
                         <h2>2. Send Files</h2>
-                        <button id="disconnectBtn" class="btn-action" style="background: var(--danger);">🚪 Disconnect</button>
+                        <button id="disconnectBtn" class="btn-action" style="background: var(--danger);"> Disconnect</button>
                     </div>
                     <div class="mode-toggle">
                         <button class="toggle-btn active" id="btnFiles" type="button">📄 Files</button>
@@ -85,7 +96,7 @@
                         <input type="file" id="fileInput" multiple hidden>
                         <input type="file" id="folderInput" webkitdirectory hidden>
                         <label for="fileInput" class="drop-label" id="dropLabel">
-                            <span class="icon">📄</span>
+                            <span class="icon"></span>
                             <span id="dropText">Tap to select files</span>
                         </label>
                     </div>
@@ -103,7 +114,7 @@
 
             <div id="tab-saved" class="tab-content" role="tabpanel">
                 <section class="card">
-                    <h2> Saved Devices</h2>
+                    <h2>💾 Saved Devices</h2>
                     <p class="hint" id="noDevicesHint">No saved devices yet. Connect to save.</p>
                     <div id="savedDevicesList" class="saved-devices-list"></div>
                 </section>
@@ -112,8 +123,8 @@
             <div id="tab-history" class="tab-content" role="tabpanel">
                 <section class="card">
                     <div class="card-header-row">
-                        <h2> Transfer History</h2>
-                        <button id="clearHistoryBtn" class="btn-action">️ Clear</button>
+                        <h2>🕒 Transfer History</h2>
+                        <button id="clearHistoryBtn" class="btn-action">🗑️ Clear</button>
                     </div>
                     <div id="historyList" class="history-list"></div>
                 </section>
