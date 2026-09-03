@@ -1,8 +1,5 @@
-// app.js - FINAL PRODUCTION VERSION
+// app.js - COMPLETE PRODUCTION VERSION
 
-// ═══════════════════════════════════════════
-// DOM REFERENCES
-// ══════════════════════════════════════════
 const $ = id => document.getElementById(id);
 const hostView = $('hostView'), clientView = $('clientView');
 const roomCodeDisplay = $('roomCodeDisplay'), roomCodeInput = $('roomCodeInput');
@@ -12,23 +9,17 @@ const connectionStatus = $('connectionStatus');
 const sendCard = $('sendCard'), receiveCard = $('receiveCard');
 const fileInput = $('fileInput'), folderInput = $('folderInput');
 const fileListEl = $('fileList'), transferLog = $('transferLog');
-const statusLog = $('statusLog');
 const downloadAllBtn = $('downloadAllBtn');
 const savedDevicesList = $('savedDevicesList'), noDevicesHint = $('noDevicesHint');
 const historyList = $('historyList'), clearHistoryBtn = $('clearHistoryBtn');
 
-// ═══════════════════════════════════════════
-// STATE & CONSTANTS
-// ═══════════════════════════════════════════
 let peer = null, conn = null;
 let isConnectionReady = false, isHost = false, currentRoomCode = null;
-let receivedFiles = []; // Stores blobs for "Download All"
+let receivedFiles = [];
 const PEER_PREFIX = 'qrlan-';
-const ROOM_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // No 0/O, 1/I/L
+const ROOM_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
-// ═══════════════════════════════════════════
-// TABS LOGIC
-// ═══════════════════════════════════════════
+// Tabs
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -38,16 +29,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     });
 });
 
-// ══════════════════════════════════════════
-// UTILITIES
-// ═══════════════════════════════════════════
 function log(msg, type = 'info') {
-    const p = document.createElement('p');
-    p.textContent = `> ${msg}`;
-    if (type === 'success') p.classList.add('success');
-    if (type === 'error') p.classList.add('error');
-    statusLog.appendChild(p);
-    statusLog.scrollTop = statusLog.scrollHeight;
+    console.log(`[${type.toUpperCase()}] ${msg}`);
 }
 
 function formatSize(bytes) {
@@ -63,16 +46,14 @@ function generateRoomCode() {
     return code;
 }
 
-// ═══════════════════════════════════════════
-// LOCALSTORAGE: SAVED DEVICES & HISTORY
-// ═══════════════════════════════════════════
+// LocalStorage
 const Storage = {
     getDevices: () => JSON.parse(localStorage.getItem('p2p_devices') || '[]'),
     saveDevice: (device) => {
         let devices = Storage.getDevices();
         const idx = devices.findIndex(d => d.code === device.code);
-        if (idx >= 0) { devices[idx] = { ...devices[idx], ...device, lastSeen: Date.now() }; }
-        else { devices.push({ ...device, lastSeen: Date.now(), count: 1 }); }
+        if (idx >= 0) devices[idx] = { ...devices[idx], ...device, lastSeen: Date.now() };
+        else devices.push({ ...device, lastSeen: Date.now(), count: 1 });
         localStorage.setItem('p2p_devices', JSON.stringify(devices));
         renderSavedDevices();
     },
@@ -84,13 +65,10 @@ const Storage = {
     addHistory: (item) => {
         const history = Storage.getHistory();
         history.unshift({ ...item, date: Date.now() });
-        localStorage.setItem('p2p_history', JSON.stringify(history.slice(0, 50))); // Keep last 50
+        localStorage.setItem('p2p_history', JSON.stringify(history.slice(0, 50)));
         renderHistory();
     },
-    clearHistory: () => {
-        localStorage.removeItem('p2p_history');
-        renderHistory();
-    }
+    clearHistory: () => { localStorage.removeItem('p2p_history'); renderHistory(); }
 };
 
 function renderSavedDevices() {
@@ -99,12 +77,12 @@ function renderSavedDevices() {
     noDevicesHint.style.display = 'none';
     savedDevicesList.innerHTML = devices.map(d => `
         <div class="saved-device-item">
-            <div class="device-info">
-                <div class="device-name">${d.name || 'Unknown Device'}</div>
-                <div class="device-code">${d.code} • ${d.count || 1}x</div>
+            <div class="device-info" style="flex:1">
+                <div class="history-name">${d.name || 'Unknown Device'}</div>
+                <div class="history-meta">${d.code} • ${d.count || 1}x</div>
             </div>
             <button class="connect-btn" onclick="joinRoom('${d.code}')">Connect</button>
-            <button class="delete-btn" onclick="Storage.removeDevice('${d.code}')">️</button>
+            <button class="delete-btn" onclick="Storage.removeDevice('${d.code}')">🗑️</button>
         </div>
     `).join('');
 }
@@ -113,7 +91,7 @@ function renderHistory() {
     const history = Storage.getHistory();
     if (history.length === 0) { historyList.innerHTML = '<p class="hint">No history yet.</p>'; return; }
     historyList.innerHTML = history.map(h => `
-        <div class="history-item ${h.type}">
+        <div class="history-item">
             <span class="history-icon">${h.type === 'sent' ? '📤' : '📥'}</span>
             <div class="history-details">
                 <div class="history-name">${h.name}</div>
@@ -123,9 +101,7 @@ function renderHistory() {
     `).join('');
 }
 
-// ═══════════════════════════════════════════
-// 1. INITIALIZATION
-// ═══════════════════════════════════════════
+// Init
 function init() {
     const params = new URLSearchParams(window.location.search);
     const urlRoom = params.get('room');
@@ -143,7 +119,6 @@ function init() {
         isHost = true;
         startHost();
     }
-
     renderSavedDevices();
     renderHistory();
 }
@@ -158,17 +133,23 @@ function createPeer(peerId) {
     peer = new Peer(peerId, { config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } });
     
     peer.on('open', () => {
-        log(`✅ Ready: ${peerId}`, 'success');
+        log(`Ready: ${peerId}`);
         if (isHost) {
             $('qrWrapper').style.display = 'flex';
-            new QRCode($('qrcode'), { text: `${window.location.origin}/?room=${currentRoomCode}`, width: 180, height: 180 });
+            // Clear previous QR if any
+            $('qrcode').innerHTML = '';
+            new QRCode($('qrcode'), { 
+                text: `${window.location.origin}/?room=${currentRoomCode}`, 
+                width: 180, height: 180,
+                colorDark: '#1a202c', colorLight: '#ffffff'
+            });
         }
     });
 
     peer.on('connection', setupConnection);
     
     peer.on('error', (err) => {
-        log(`❌ ${err.type}`, 'error');
+        log(`Error: ${err.type}`, 'error');
         if (err.type === 'unavailable-id' && isHost) {
             currentRoomCode = generateRoomCode();
             roomCodeDisplay.textContent = currentRoomCode;
@@ -177,10 +158,7 @@ function createPeer(peerId) {
     });
 }
 
-// ═══════════════════════════════════════════
-// 2. CONNECTION LOGIC
-// ═══════════════════════════════════════════
-window.joinRoom = function(code) { // Exposed for onclick
+window.joinRoom = function(code) {
     if (!code || code.length < 6) return;
     code = code.toUpperCase();
     connectionStatus.textContent = `Connecting to ${code}...`;
@@ -189,29 +167,26 @@ window.joinRoom = function(code) { // Exposed for onclick
 
     peer = new Peer(undefined, { config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } });
     peer.on('open', () => {
-        const conn = peer.connect(`${PEER_PREFIX}${code}`, { reliable: true, serialization: 'binary' });
-        setupConnection(conn, code);
-        setTimeout(() => { if (!isConnectionReady) { log('️ Timeout', 'error'); clientSpinner.style.display = 'none'; roomInputGroup.style.display = 'flex'; } }, 15000);
+        const c = peer.connect(`${PEER_PREFIX}${code}`, { reliable: true, serialization: 'binary' });
+        setupConnection(c, code);
+        setTimeout(() => { if (!isConnectionReady) { log('Timeout', 'error'); clientSpinner.style.display = 'none'; roomInputGroup.style.display = 'flex'; } }, 15000);
     });
-    peer.on('error', () => { log('❌ Failed', 'error'); clientSpinner.style.display = 'none'; roomInputGroup.style.display = 'flex'; });
+    peer.on('error', () => { log('Failed', 'error'); clientSpinner.style.display = 'none'; roomInputGroup.style.display = 'flex'; });
 };
 
 function setupConnection(connection, code = null) {
     conn = connection;
     conn.on('open', () => {
         isConnectionReady = true;
-        log('✅ Connected!', 'success');
+        log('Connected!', 'success');
         sendCard.style.display = 'block';
         if (code) Storage.saveDevice({ code, name: prompt('Name this device?', 'Device') || 'Device' });
         if (!isHost) { connectionStatus.textContent = '✅ Connected!'; clientSpinner.style.display = 'none'; }
     });
     conn.on('data', handleIncomingData);
-    conn.on('close', () => { isConnectionReady = false; sendCard.style.display = 'none'; log('⚠️ Disconnected', 'error'); });
+    conn.on('close', () => { isConnectionReady = false; sendCard.style.display = 'none'; log('Disconnected', 'error'); });
 }
 
-// ═══════════════════════════════════════════
-// 3. SENDING LOGIC
-// ═══════════════════════════════════════════
 $('btnFiles').onclick = () => toggleMode(false);
 $('btnFolder').onclick = () => toggleMode(true);
 
@@ -226,7 +201,7 @@ fileInput.onchange = e => handleFiles(e.target.files);
 folderInput.onchange = e => handleFiles(e.target.files);
 
 async function handleFiles(files) {
-    if (!isConnectionReady) return log('❌ Not connected', 'error');
+    if (!isConnectionReady) return log('Not connected', 'error');
     fileListEl.innerHTML = '';
     for (const file of files) {
         if (file.size === 0 && file.name.endsWith('/')) continue;
@@ -265,20 +240,16 @@ function sendFile(file, statusEl) {
     });
 }
 
-// ═══════════════════════════════════════════
-// 4. RECEIVING & BATCH SAVE LOGIC
-// ═══════════════════════════════════════════
 let currentMeta = null, chunks = [], receivedCount = 0;
 
 function handleIncomingData(data) {
     if (data.type === 'start') {
         currentMeta = data; chunks = new Array(data.chunks); receivedCount = 0;
         receiveCard.style.display = 'block';
-        downloadAllBtn.style.display = 'none'; // Hide until all received
+        downloadAllBtn.style.display = 'none';
         
         const item = document.createElement('div');
         item.className = 'file-card';
-        item.id = `f-${Date.now()}`;
         item.innerHTML = `<div class="file-card-header"><span>${data.name}</span><span>${formatSize(data.size)}</span></div>
                           <div class="progress-bar"><div class="progress-fill"></div></div><p class="progress-text">0%</p>`;
         transferLog.appendChild(item);
@@ -298,33 +269,29 @@ function handleIncomingData(data) {
         const card = transferLog.lastElementChild;
         if (card) { card.querySelector('.progress-text').textContent = 'Received'; card.querySelector('.progress-fill').classList.add('complete'); }
         
-        downloadAllBtn.style.display = 'block'; // Show download button
+        downloadAllBtn.style.display = 'block';
         currentMeta = null; chunks = [];
     }
 }
 
 downloadAllBtn.onclick = async () => {
-    log(`⬇️ Downloading ${receivedFiles.length} files...`, 'success');
+    log(`Downloading ${receivedFiles.length} files...`);
     for (const file of receivedFiles) {
         const url = URL.createObjectURL(file.blob);
         const a = document.createElement('a');
         a.href = url; a.download = file.name;
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        await new Promise(r => setTimeout(r, 500)); // Delay to prevent browser blocking
+        await new Promise(r => setTimeout(r, 500));
     }
     receivedFiles = [];
     downloadAllBtn.style.display = 'none';
     transferLog.innerHTML = '';
-    log('✅ All files downloaded!', 'success');
+    log('All files downloaded!', 'success');
 };
 
-// ═══════════════════════════════════════════
-// 5. UI ACTIONS (Copy/Share/Clear)
-// ═══════════════════════════════════════════
 copyCodeBtn.onclick = () => { navigator.clipboard.writeText(currentRoomCode); copyCodeBtn.textContent = '✅ Copied'; setTimeout(() => copyCodeBtn.textContent = '📋 Copy', 2000); };
 shareCodeBtn.onclick = () => { if (navigator.share) navigator.share({ title: 'P2P Transfer', url: `${window.location.origin}/?room=${currentRoomCode}` }); else copyCodeBtn.click(); };
 clearHistoryBtn.onclick = () => { if(confirm('Clear history?')) Storage.clearHistory(); };
 
-// Boot
 document.addEventListener('DOMContentLoaded', init);
