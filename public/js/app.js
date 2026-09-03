@@ -1,4 +1,4 @@
-// app.js - TRUE BIDIRECTIONAL P2P (BINARY FIX)
+// app.js - TRUE BIDIRECTIONAL P2P (WITH FOLDER SUPPORT)
 
 // ── DOM References ──
 const hostView = document.getElementById('hostView');
@@ -9,15 +9,22 @@ const connectionStatus = document.getElementById('connectionStatus');
 const sendCard = document.getElementById('sendCard');
 const receiveCard = document.getElementById('receiveCard');
 const fileInput = document.getElementById('fileInput');
+const folderInput = document.getElementById('folderInput'); // NEW
 const fileListEl = document.getElementById('fileList');
 const transferLog = document.getElementById('transferLog');
 const statusLog = document.getElementById('statusLog');
+const dropZone = document.getElementById('dropZone');
+const btnFiles = document.getElementById('btnFiles'); // NEW
+const btnFolder = document.getElementById('btnFolder'); // NEW
+const dropLabel = document.getElementById('dropLabel'); // NEW
+const dropText = document.getElementById('dropText'); // NEW
 
 // ── State ──
 let peer = null;
 let conn = null;
 let fileCounter = 0;
 let isConnectionReady = false;
+let isFolderMode = false; // NEW: Track current mode
 
 // ── Utility: Log ──
 function log(msg, type = 'info') {
@@ -81,7 +88,6 @@ function showQRCode(peerId) {
     qrWrapper.style.display = 'flex';
     
     document.getElementById('qrcode').innerHTML = '';
-    // eslint-disable-next-line no-undef
     new QRCode(document.getElementById('qrcode'), {
         text: clientUrl, width: 200, height: 200,
         colorDark: '#1a202c', colorLight: '#ffffff',
@@ -95,7 +101,6 @@ function connectToHost(targetId) {
     connectionStatus.textContent = `Connecting to ${targetId.substring(0, 8)}...`;
     log(`📡 Attempting to connect to: ${targetId}`, 'info');
     
-    // 🚨 CRITICAL FIX: Changed serialization from 'json' to 'binary'
     const connection = peer.connect(targetId, { 
         reliable: true, 
         serialization: 'binary' 
@@ -150,11 +155,45 @@ function enableSendReceive() {
     log('✅ You can now SEND and RECEIVE files!', 'success');
 }
 
-// ── 5. SENDING Logic ──
+// ── 5. MODE TOGGLE LOGIC (NEW) ──
+btnFiles.addEventListener('click', () => setMode(false));
+btnFolder.addEventListener('click', () => setMode(true));
+
+function setMode(isFolder) {
+    isFolderMode = isFolder;
+    
+    // Update Button Styles
+    if (isFolder) {
+        btnFolder.classList.add('active');
+        btnFiles.classList.remove('active');
+        dropLabel.setAttribute('for', 'folderInput'); // Link label to folder input
+        dropText.textContent = 'Click to select a folder';
+        dropLabel.querySelector('.icon').textContent = '📁';
+        log('Mode switched to: Folder', 'info');
+    } else {
+        btnFiles.classList.add('active');
+        btnFolder.classList.remove('active');
+        dropLabel.setAttribute('for', 'fileInput'); // Link label to file input
+        dropText.textContent = 'Click to browse or drag & drop files here';
+        dropLabel.querySelector('.icon').textContent = '📄';
+        log('Mode switched to: Files', 'info');
+    }
+}
+
+// ── 6. SENDING LOGIC ──
+
+// Handle File Selection
 fileInput.addEventListener('change', (e) => {
     log(`📂 Files selected: ${e.target.files.length}`, 'info');
     handleFiles(e.target.files);
-    fileInput.value = ''; // Reset so same file can be selected again
+    fileInput.value = ''; // Reset
+});
+
+// Handle Folder Selection (NEW)
+folderInput.addEventListener('change', (e) => {
+    log(`📁 Folder selected: ${e.target.files.length} files found`, 'info');
+    handleFiles(e.target.files);
+    folderInput.value = ''; // Reset
 });
 
 async function handleFiles(files) {
@@ -171,11 +210,14 @@ async function handleFiles(files) {
     
     if (!files || files.length === 0) return;
 
-    log(`📤 Starting transfer of ${files.length} file(s)...`, 'success');
+    log(`📤 Starting transfer of ${files.length} item(s)...`, 'success');
     fileListEl.innerHTML = '';
 
     const fileItems = [];
     for (const file of files) {
+        // Skip empty directories (size 0 and ends with /)
+        if (file.size === 0 && file.name.endsWith('/')) continue;
+
         const item = document.createElement('div');
         item.className = 'file-item';
         const nameSpan = document.createElement('span'); 
@@ -192,12 +234,11 @@ async function handleFiles(files) {
     for (const { file, statusEl } of fileItems) {
         await sendFile(file, statusEl);
     }
-    log('✅ All files sent!', 'success');
+    log('✅ All items sent!', 'success');
 }
 
 function sendFile(file, statusEl) {
     return new Promise((resolve) => {
-        // 16KB chunks are optimal for WebRTC binary transfer
         const chunkSize = 16 * 1024; 
         const totalChunks = Math.ceil(file.size / chunkSize);
         let currentChunk = 0;
@@ -217,7 +258,6 @@ function sendFile(file, statusEl) {
                     return;
                 }
                 
-                // Flow control: pause if buffer gets too full
                 if (conn.bufferedAmount > 1024 * 1024) { 
                     setTimeout(sendNextChunk, 50); 
                     return; 
@@ -230,7 +270,6 @@ function sendFile(file, statusEl) {
                 
                 reader.onload = (e) => {
                     try {
-                        // e.target.result is an ArrayBuffer, which 'binary' serialization handles perfectly
                         conn.send({ type: 'chunk', index: currentChunk, data: e.target.result });
                         currentChunk++;
                         statusEl.textContent = `${Math.round((currentChunk / totalChunks) * 100)}%`;
@@ -259,7 +298,7 @@ function sendFile(file, statusEl) {
     });
 }
 
-// ── 6. RECEIVING Logic ──
+// ── 7. RECEIVING Logic ──
 let currentFileMeta = null;
 let receivedChunks = [];
 let totalBytesReceived = 0;
@@ -293,7 +332,6 @@ function handleIncomingData(data) {
         } else if (data.type === 'chunk') {
             if (!currentFileMeta) return;
             
-            // Store the ArrayBuffer in the correct index
             receivedChunks[data.index] = data.data;
             totalBytesReceived += data.data.byteLength;
             
@@ -315,11 +353,10 @@ function handleIncomingData(data) {
             const card = document.getElementById(`card-${fileCounter}`);
             const fileName = currentFileMeta ? currentFileMeta.name : 'downloaded_file';
             
-            // Filter out any undefined chunks and create the Blob
             const validChunks = receivedChunks.filter(c => c !== undefined);
             const fileBlob = new Blob(validChunks);
             
-            log(`💾 Blob created: ${formatSize(fileBlob.size)} bytes`, 'success');
+            log(` Blob created: ${formatSize(fileBlob.size)} bytes`, 'success');
             
             const actionsDiv = document.createElement('div');
             actionsDiv.style.display = 'flex'; 
@@ -379,7 +416,6 @@ function handleIncomingData(data) {
             actionsDiv.appendChild(discardBtn);
             card.appendChild(actionsDiv);
             
-            // Reset for next file
             currentFileMeta = null; 
             receivedChunks = []; 
             totalBytesReceived = 0;

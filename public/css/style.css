@@ -87,7 +87,6 @@ header p { color: var(--text-dim); font-size: 1rem; }
     transform-style: preserve-3d;
 }
 
-/* 3D Tilt Hover Effect (Handled by JS, but base transition here) */
 .card:hover {
     box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
 }
@@ -102,7 +101,7 @@ header p { color: var(--text-dim); font-size: 1rem; }
 }
 
 /* ═══════════════════════════════════════
-   MODE TOGGLE
+   MODE TOGGLE (NEW)
    ═══════════════════════════════════════ */
 .mode-toggle {
     display: flex;
@@ -196,7 +195,7 @@ header p { color: var(--text-dim); font-size: 1rem; }
     display: flex;
     justify-content: center;
     padding: 24px;
-    background: #ffffff; /* MUST be white for scanners */
+    background: #ffffff;
     border-radius: 16px;
     margin: 20px auto;
     max-width: 240px;
@@ -211,7 +210,7 @@ header p { color: var(--text-dim); font-size: 1rem; }
 .session-info, .url-display { text-align: center; font-size: 0.85rem; color: var(--text-dim); margin-top: 12px; word-break: break-all; }
 .session-info strong { color: var(--text-main); font-family: monospace; }
 
-/* ═══════════════════════════════════════
+/* ══════════════════════════════════════
    STATUS LOG
    ═══════════════════════════════════════ */
 .status-log {
@@ -229,7 +228,7 @@ header p { color: var(--text-dim); font-size: 1rem; }
 .status-log .success { color: var(--success); text-shadow: 0 0 5px var(--success-glow); }
 .status-log .error { color: var(--danger); text-shadow: 0 0 5px var(--danger-glow); }
 
-/* ══════════════════════════════════════
+/* ═════════════════════════════════════
    RECEIVER SPECIFIC
    ═══════════════════════════════════════ */
 .receiver-bg { background-color: var(--bg-dark); background-image: var(--bg-gradient); }
@@ -273,7 +272,7 @@ header p { color: var(--text-dim); font-size: 1rem; }
     cursor: pointer;
     text-align: center;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 4px 0 #1d4ed8, 0 5px 10px rgba(0,0,0,0.3); /* 3D depth */
+    box-shadow: 0 4px 0 #1d4ed8, 0 5px 10px rgba(0,0,0,0.3);
     margin-top: 12px;
 }
 .btn-download:hover, .btn-primary:hover {
@@ -282,7 +281,7 @@ header p { color: var(--text-dim); font-size: 1rem; }
 }
 .btn-download:active, .btn-primary:active {
     transform: translateY(4px);
-    box-shadow: 0 0 0 #1d4ed8, 0 2px 5px rgba(0,0,0,0.3); /* Pressed effect */
+    box-shadow: 0 0 0 #1d4ed8, 0 2px 5px rgba(0,0,0,0.3);
 }
 .btn-download[style*="success"] { background: var(--success); box-shadow: 0 4px 0 #059669, 0 5px 10px rgba(0,0,0,0.3); }
 .btn-download[style*="danger"] { background: var(--danger); box-shadow: 0 4px 0 #dc2626, 0 5px 10px rgba(0,0,0,0.3); }

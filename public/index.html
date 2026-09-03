@@ -35,13 +35,23 @@
 
             <!-- 2. SEND FILES CARD (Hidden until connected) -->
             <section class="card" id="sendCard" style="display: none;">
-                <h2>2. Send Files</h2>
+                <h2>2. Send Files or Folder</h2>
+                
+                <!-- NEW: Mode Toggle Buttons -->
+                <div class="mode-toggle">
+                    <button class="toggle-btn active" id="btnFiles" type="button">📄 Files</button>
+                    <button class="toggle-btn" id="btnFolder" type="button">📁 Folder</button>
+                </div>
+
                 <div class="drop-zone" id="dropZone">
-                    <!-- Make file input directly accessible -->
+                    <!-- Standard File Input -->
                     <input type="file" id="fileInput" multiple hidden>
+                    <!-- NEW: Folder Input (webkitdirectory allows folder selection) -->
+                    <input type="file" id="folderInput" webkitdirectory hidden>
+                    
                     <label for="fileInput" class="drop-label" id="dropLabel">
                         <span class="icon">📄</span>
-                        <span id="dropText">Tap to select files</span>
+                        <span id="dropText">Click to browse or drag & drop files here</span>
                     </label>
                 </div>
                 <div id="fileList" class="file-list"></div>
