@@ -1,34 +1,16 @@
 {
   "name": "QR P2P Transfer",
-  "short_name": "P2P Transfer",
-  "description": "Fast, secure, peer-to-peer file transfer. No server. No limits.",
+  "short_name": "QR Transfer",
+  "description": "Send files and folders directly between devices over an encrypted peer-to-peer link. No uploads, no accounts.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "background_color": "#0b0e1d",
+  "theme_color": "#0b0e1d",
   "orientation": "portrait-primary",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
   "icons": [
-    {
-      "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📤</text></svg>",
-      "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📤</text></svg>",
-      "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
-  ],
-  "categories": ["utilities", "productivity"],
-  "shortcuts": [
-    {
-      "name": "New Transfer",
-      "short_name": "Transfer",
-      "description": "Start a new file transfer",
-      "url": "/?action=new",
-      "icons": [{"src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📤</text></svg>"}]
-    }
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

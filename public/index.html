@@ -1,145 +1,183 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>QR P2P Transfer - Broadcast</title>
-    <meta name="description" content="Fast, secure, peer-to-peer file transfer">
-    <meta name="theme-color" content="#0f172a">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📤</text></svg>">
-    
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
-    <link rel="preconnect" href="https://unpkg.com">
-    
-    <link rel="stylesheet" href="/css/style.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js" defer></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>QR P2P Transfer — send files device to device</title>
+<meta name="description" content="Send files and folders directly between devices over an encrypted peer-to-peer link. No uploads, no accounts, no size limits from a server." />
+<meta name="theme-color" content="#0B0E1D" />
+<link rel="manifest" href="/manifest.json" />
+<link rel="icon" href="/icons/icon-192.png" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>📤 QR P2P Transfer</h1>
-            <p>Broadcast to multiple devices simultaneously</p>
-        </header>
 
-        <main>
-            <nav class="tabs" role="tablist">
-                <button class="tab-btn active" data-tab="transfer" role="tab" aria-selected="true">Transfer</button>
-                <button class="tab-btn" data-tab="saved" role="tab" aria-selected="false">Saved</button>
-                <button class="tab-btn" data-tab="history" role="tab" aria-selected="false">History</button>
-            </nav>
+<div id="toastHost" class="toast-host" aria-live="polite"></div>
 
-            <div id="tab-transfer" class="tab-content active" role="tabpanel">
-                
-                <section class="card" id="connectionCard">
-                    <h2>1. Connect</h2>
-                    
-                    <!-- MODE TOGGLE -->
-                    <div class="mode-toggle connection-mode-toggle">
-                        <button class="toggle-btn active" id="hostModeBtn" type="button"> Create Room</button>
-                        <button class="toggle-btn" id="clientModeBtn" type="button">📥 Join Room</button>
-                    </div>
-                    
-                    <!-- Host View -->
-                    <div id="hostView">
-                        <div class="room-code-section">
-                            <p class="room-label">Your Room Code</p>
-                            <div class="room-code-display" id="roomCodeDisplay">------</div>
-                            <div class="room-actions">
-                                <button id="copyCodeBtn" class="btn-action" title="Copy code">📋 Copy</button>
-                                <button id="shareCodeBtn" class="btn-action" title="Share link">🔗 Share</button>
-                            </div>
-                        </div>
-                        <p class="instruction">Share code or scan QR</p>
-                        <div class="qr-wrapper" id="qrWrapper">
-                            <div id="qrcode"></div>
-                        </div>
-                        
-                        <!-- Connected Devices List -->
-                        <div id="connectedDevicesSection" style="display: none; margin-top: 20px;">
-                            <h3 style="font-size: 0.9rem; color: var(--text-dim); margin-bottom: 10px;">
-                                Connected Devices (<span id="deviceCount">0</span>)
-                            </h3>
-                            <div id="connectedDevicesList" class="connected-devices-list"></div>
-                        </div>
-                        
-                        <p id="hostStatus" class="hint">Waiting for connections...</p>
-                        <button id="closeRoomBtn" class="btn-action" style="display: none; margin-top: 15px; background: var(--danger);">🚪 Close Room</button>
-                    </div>
-                    
-                    <!-- Client View -->
-                    <div id="clientView" style="display: none;">
-                        <div class="client-connect">
-                            <p class="center-text" id="connectionStatus">Enter room code to connect</p>
-                            <div class="room-input-group" id="roomInputGroup">
-                                <input type="text" id="roomCodeInput" placeholder="6-DIGIT CODE" maxlength="6" class="room-input" autocomplete="off" autocapitalize="characters">
-                                <button id="joinRoomBtn" class="btn-primary">Join</button>
-                            </div>
-                            <div class="spinner" id="clientSpinner" style="display:none;"></div>
-                            <p class="hint">Or scan the QR code</p>
-                            <button id="leaveRoomBtn" class="btn-action" style="display: none; margin-top: 15px;">🚪 Leave Room</button>
-                        </div>
-                    </div>
-                </section>
+<div class="page">
 
-                <section class="card" id="sendCard" style="display: none;">
-                    <div class="card-header-row">
-                        <h2>2. Send Files</h2>
-                        <button id="disconnectBtn" class="btn-action" style="background: var(--danger);"> Disconnect</button>
-                    </div>
-                    <div class="mode-toggle">
-                        <button class="toggle-btn active" id="btnFiles" type="button">📄 Files</button>
-                        <button class="toggle-btn" id="btnFolder" type="button">📁 Folder</button>
-                    </div>
-                    <div class="drop-zone" id="dropZone">
-                        <input type="file" id="fileInput" multiple hidden>
-                        <input type="file" id="folderInput" webkitdirectory hidden>
-                        <label for="fileInput" class="drop-label" id="dropLabel">
-                            <span class="icon"></span>
-                            <span id="dropText">Tap to select files</span>
-                        </label>
-                    </div>
-                    <div id="fileList" class="file-list"></div>
-                </section>
-
-                <section class="card" id="receiveCard" style="display: none;">
-                    <div class="card-header-row">
-                        <h2>3. Receiving</h2>
-                        <button id="downloadAllBtn" class="btn-action" style="display:none;">⬇️ Download All</button>
-                    </div>
-                    <div id="transferLog" class="receiver-file-list"></div>
-                </section>
-            </div>
-
-            <div id="tab-saved" class="tab-content" role="tabpanel">
-                <section class="card">
-                    <h2>💾 Saved Devices</h2>
-                    <p class="hint" id="noDevicesHint">No saved devices yet. Connect to save.</p>
-                    <div id="savedDevicesList" class="saved-devices-list"></div>
-                </section>
-            </div>
-
-            <div id="tab-history" class="tab-content" role="tabpanel">
-                <section class="card">
-                    <div class="card-header-row">
-                        <h2>🕒 Transfer History</h2>
-                        <button id="clearHistoryBtn" class="btn-action">🗑️ Clear</button>
-                    </div>
-                    <div id="historyList" class="history-list"></div>
-                </section>
-            </div>
-
-        </main>
+  <header class="app-header">
+    <div class="brand">
+      <svg class="brand__mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="16" cy="16" r="3.2" fill="currentColor"/>
+        <circle cx="16" cy="16" r="8" stroke="currentColor" stroke-width="1.6" opacity="0.55"/>
+        <circle cx="16" cy="16" r="13.5" stroke="currentColor" stroke-width="1.4" opacity="0.28"/>
+      </svg>
+      <div>
+        <h1>QR P2P Transfer</h1>
+        <p class="tagline">Direct, encrypted, no cloud in between.</p>
+      </div>
     </div>
+    <button id="installBtn" class="btn btn--ghost btn--sm" type="button" hidden>Install app</button>
+  </header>
 
-    <script src="/js/app.js" defer></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed'));
-            });
-        }
-    </script>
+  <main>
+
+    <!-- 1 · Link -->
+    <section id="linkPanel" class="panel panel--link">
+      <h2>1 &middot; Link this device</h2>
+
+      <div id="recentDevices" class="recent-row" hidden>
+        <p class="recent-row__label">Quick connect</p>
+        <div id="recentList" class="chip-list"></div>
+      </div>
+
+      <label class="field">
+        <span class="field__label">Your device name</span>
+        <input id="deviceNameInput" type="text" placeholder="e.g. Priya's phone" maxlength="30" autocomplete="off" />
+      </label>
+
+      <div id="hostBlock" class="host-block">
+        <div class="beacon" aria-hidden="true">
+          <span class="beacon__ring beacon__ring--1"></span>
+          <span class="beacon__ring beacon__ring--2"></span>
+          <span class="beacon__dot"></span>
+        </div>
+        <p class="host-block__hint">Scan this on the other device, or share the code</p>
+        <div class="code-row">
+          <span id="roomCodeDisplay" class="code-display">—</span>
+          <div class="code-row__actions">
+            <button id="copyCodeBtn" class="btn btn--ghost btn--sm" type="button">Copy code</button>
+            <button id="copyLinkBtn" class="btn btn--ghost btn--sm" type="button">Copy link</button>
+          </div>
+        </div>
+        <div id="qrWrapper" class="qr-wrapper" hidden>
+          <div id="qrcode"></div>
+        </div>
+      </div>
+
+      <div class="join-block">
+        <label class="field">
+          <span class="field__label">Have a code instead?</span>
+          <div class="join-block__row">
+            <input id="joinCodeInput" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="123456" autocomplete="off" />
+            <button id="joinBtn" class="btn btn--primary btn--sm" type="button">Connect</button>
+          </div>
+        </label>
+      </div>
+
+      <details id="encryptionDetails" class="details">
+        <summary>Add an encryption passphrase (optional)</summary>
+        <label class="field">
+          <span class="field__label">Shared passphrase</span>
+          <input id="passphraseInput" type="password" placeholder="Type the same passphrase on both devices" autocomplete="off" />
+        </label>
+        <p class="hint">Never sent over the connection — both devices derive the same key locally. Leave blank to send unencrypted.</p>
+      </details>
+
+      <div id="connectionStatusRow" class="status-row" hidden>
+        <span class="spinner" aria-hidden="true"></span>
+        <p id="connectionStatus">Connecting…</p>
+      </div>
+
+      <div id="rosterBlock" class="roster-block" hidden>
+        <div class="roster-block__head">
+          <h3>Connected devices</h3>
+          <span id="rosterCount" class="roster-block__count"></span>
+        </div>
+        <ul id="rosterList" class="roster-list"></ul>
+        <button id="leaveBtn" class="btn btn--danger-ghost btn--sm" type="button">Disconnect</button>
+      </div>
+    </section>
+
+    <!-- 2 · Send -->
+    <section id="sendPanel" class="panel panel--send" hidden>
+      <h2>2 &middot; Send</h2>
+
+      <div class="mode-toggle" role="group" aria-label="What to send">
+        <button id="btnFiles" class="mode-toggle__btn active" type="button">Files</button>
+        <button id="btnFolder" class="mode-toggle__btn" type="button">Folder</button>
+      </div>
+
+      <label id="targetRow" class="field" hidden>
+        <span class="field__label">Send to</span>
+        <select id="targetSelect"></select>
+      </label>
+
+      <div id="dropZone" class="drop-zone">
+        <label id="dropLabel" for="fileInput" class="drop-zone__hit">
+          <span id="dropIcon" class="drop-zone__icon" aria-hidden="true">📄</span>
+          <span id="dropText" class="drop-zone__text">Click to browse or drag &amp; drop files here</span>
+        </label>
+        <input id="fileInput" type="file" multiple hidden />
+        <input id="folderInput" type="file" webkitdirectory directory hidden />
+      </div>
+      <p class="hint">Folder mode zips everything first, so the receiver gets the original structure back. Folder picking needs a desktop browser.</p>
+
+      <div id="zipProgressRow" class="zip-progress" hidden>
+        <div class="zip-progress__bar"><div id="zipProgressFill" class="zip-progress__fill" style="width:0%"></div></div>
+        <p id="zipProgressText" class="zip-progress__text">Compressing…</p>
+      </div>
+
+      <div id="fileList" class="file-list"></div>
+    </section>
+
+    <!-- 3 · Receive -->
+    <section id="receivePanel" class="panel panel--receive" hidden>
+      <h2>3 &middot; Receive</h2>
+
+      <label class="toggle-row">
+        <input id="autoSaveToggle" type="checkbox" />
+        <span>Auto-save incoming files</span>
+      </label>
+
+      <p id="receiveEmpty" class="empty-note">Nothing incoming yet — files will appear here as they arrive.</p>
+      <div id="transferLog" class="receiver-file-list"></div>
+    </section>
+
+    <!-- History -->
+    <section class="panel panel--muted">
+      <details id="historyDetails" class="details">
+        <summary>History</summary>
+        <p id="historyEmpty" class="empty-note">Nothing sent or received yet — your transfers will show up here.</p>
+        <ul id="historyList" class="history-list"></ul>
+        <button id="clearHistoryBtn" class="btn btn--ghost btn--sm" type="button">Clear history</button>
+      </details>
+    </section>
+
+    <!-- Status log -->
+    <section class="panel panel--muted">
+      <details id="statusDetails" class="details" open>
+        <summary>Status</summary>
+        <div id="statusLog" class="status-log"></div>
+      </details>
+    </section>
+
+  </main>
+
+  <footer class="app-footer">
+    <p>Built on WebRTC via PeerJS. A public signaling server only introduces two devices to each other — file bytes travel directly between them, never through a server.</p>
+  </footer>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script type="module" src="/js/main.js"></script>
 </body>
 </html>

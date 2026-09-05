@@ -1,13 +1,4 @@
-# Dependencies (never commit 3rd party code)
 node_modules/
-
-# OS generated files
 .DS_Store
-Thumbs.db
-
-# Environment variables
+*.log
 .env
-
-# Uploaded files (privacy: never commit user data)
-uploads/*
-!uploads/.gitkeep
